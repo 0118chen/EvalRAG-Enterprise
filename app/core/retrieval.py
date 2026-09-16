@@ -15,10 +15,13 @@ def bm25_score(query: str, text: str) -> float:
 
 
 def retrieve(query: str, chunks: list[Chunk], top_k: int = 5, mode: str = "hybrid") -> list[tuple[Chunk, float]]:
-    scored = [(chunk, bm25_score(query, chunk.text)) for chunk in chunks]
+    sparse = sorted([(chunk, bm25_score(query, chunk.text)) for chunk in chunks], key=lambda item: item[1], reverse=True)
+    dense = sorted([(chunk, float(len(set(_tokens(query)) & set(_tokens(chunk.text))))) for chunk in chunks], key=lambda item: item[1], reverse=True)
+    if mode == "sparse":
+        return sparse[:top_k]
     if mode == "dense":
-        scored = [(chunk, float(len(set(_tokens(query)) & set(_tokens(chunk.text))))) for chunk in chunks]
-    return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
+        return dense[:top_k]
+    return reciprocal_rank_fusion(dense, sparse, top_k=top_k)
 
 
 def reciprocal_rank_fusion(*ranked_lists: list[tuple[Chunk, float]], k: int = 60, top_k: int = 5) -> list[tuple[Chunk, float]]:
