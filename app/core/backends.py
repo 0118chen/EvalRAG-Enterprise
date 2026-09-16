@@ -5,10 +5,25 @@ from typing import Protocol
 
 from app.core.ingestion import Chunk
 from app.core.retrieval import retrieve
+from app.core.retrieval import reciprocal_rank_fusion
 
 
 class Retriever(Protocol):
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]: ...
+
+
+@dataclass
+class HybridRetriever:
+    """Compose two independent retrievers and fuse their ranked evidence."""
+
+    dense: Retriever
+    sparse: Retriever
+    fusion_k: int = 60
+
+    async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
+        import asyncio
+        dense_results, sparse_results = await asyncio.gather(self.dense.search(query, top_k), self.sparse.search(query, top_k))
+        return reciprocal_rank_fusion(dense_results, sparse_results, k=self.fusion_k, top_k=top_k)
 
 
 @dataclass
