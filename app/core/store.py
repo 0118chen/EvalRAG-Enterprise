@@ -40,6 +40,7 @@ class SQLiteStore:
             if "error_message" not in columns:
                 connection.execute("ALTER TABLE documents ADD COLUMN error_message TEXT")
             connection.execute("CREATE TABLE IF NOT EXISTS evaluations (id TEXT PRIMARY KEY, dataset_name TEXT NOT NULL, retrieval_mode TEXT NOT NULL, top_k INTEGER NOT NULL, status TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+            connection.execute("CREATE TABLE IF NOT EXISTS feedback (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, feedback TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '', rag_version TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -103,3 +104,8 @@ class SQLiteStore:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM evaluations WHERE id=?", (evaluation_id,)).fetchone()
         return dict(row) if row else None
+
+    def save_feedback(self, feedback_id: str, trace_id: str, feedback: str, comment: str, rag_version: str, prompt_version: str) -> None:
+        """Store user feedback as a durable signal for evaluation dataset curation."""
+        with self._lock, self._connect() as connection:
+            connection.execute("INSERT INTO feedback (id, trace_id, feedback, comment, rag_version, prompt_version) VALUES (?, ?, ?, ?, ?, ?)", (feedback_id, trace_id, feedback, comment, rag_version, prompt_version))

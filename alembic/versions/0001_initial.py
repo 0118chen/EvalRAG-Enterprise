@@ -21,6 +21,9 @@ def upgrade():
         op.create_index("ix_documents_knowledge_base_id", "documents", ["knowledge_base_id"])
     if not sa.inspect(bind).has_table("evaluations"):
         op.create_table("evaluations", sa.Column("id", sa.String(36), primary_key=True), sa.Column("dataset_name", sa.String(200), nullable=False), sa.Column("retrieval_mode", sa.String(20), nullable=False), sa.Column("top_k", sa.Integer(), nullable=False, server_default="5"), sa.Column("status", sa.String(20), nullable=False, server_default="queued"), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
+    if not sa.inspect(bind).has_table("feedback"):
+        op.create_table("feedback", sa.Column("id", sa.String(36), primary_key=True), sa.Column("trace_id", sa.String(100), nullable=False), sa.Column("feedback", sa.String(30), nullable=False), sa.Column("comment", sa.Text(), nullable=False, server_default=""), sa.Column("rag_version", sa.String(50), nullable=False), sa.Column("prompt_version", sa.String(100), nullable=False), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
+        op.create_index("ix_feedback_trace_id", "feedback", ["trace_id"])
 
 def downgrade():
     op.drop_table("documents")

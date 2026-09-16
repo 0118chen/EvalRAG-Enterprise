@@ -40,3 +40,14 @@ class EvaluationRecord(Base):
     top_k: Mapped[int] = mapped_column(Integer, default=5)
     status: Mapped[str] = mapped_column(String(20), default="queued")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class FeedbackRecord(Base):
+    __tablename__ = "feedback"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    trace_id: Mapped[str] = mapped_column(String(100), index=True)
+    feedback: Mapped[str] = mapped_column(String(30))
+    comment: Mapped[str] = mapped_column(Text, default="")
+    rag_version: Mapped[str] = mapped_column(String(50))
+    prompt_version: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

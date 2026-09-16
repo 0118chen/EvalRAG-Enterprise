@@ -100,7 +100,9 @@ def search(payload: SearchRequest) -> Answer:
 
 @app.post("/api/v1/feedback")
 def feedback(payload: FeedbackRequest) -> dict[str, str]:
-    return {"status": "accepted", "trace_id": payload.trace_id}
+    feedback_id = str(uuid4())
+    store.save_feedback(feedback_id, payload.trace_id, payload.feedback, payload.comment, settings.rag_version, settings.prompt_version)
+    return {"status": "accepted", "id": feedback_id, "trace_id": payload.trace_id}
 
 
 @app.post("/api/v1/evaluations")
