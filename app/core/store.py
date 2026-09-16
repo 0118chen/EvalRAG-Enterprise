@@ -62,6 +62,11 @@ class SQLiteStore:
             row = connection.execute("SELECT * FROM knowledge_bases WHERE id=? AND tenant_id=?", (kb_id, tenant_id)).fetchone()
         return KnowledgeBase(**dict(row)) if row else None
 
+    def list_knowledge_bases(self, tenant_id: str) -> list[KnowledgeBase]:
+        with self._connect() as connection:
+            rows = connection.execute("SELECT * FROM knowledge_bases WHERE tenant_id=? ORDER BY rowid DESC", (tenant_id,)).fetchall()
+        return [KnowledgeBase(**dict(row)) for row in rows]
+
     def save_document(self, document: Document, chunks: list[Chunk]) -> None:
         with self._lock, self._connect() as connection:
             connection.execute("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?)", (document.id, document.filename, document.knowledge_base_id, document.chunks, document.status, document.progress, document.error_message))
@@ -100,6 +105,12 @@ class SQLiteStore:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
         return Document(**dict(row)) if row else None
+
+    def list_documents(self, knowledge_base_id: str, tenant_id: str) -> list[Document]:
+        with self._connect() as connection:
+            rows = connection.execute("""SELECT d.* FROM documents d JOIN knowledge_bases k ON k.id=d.knowledge_base_id
+                                        WHERE d.knowledge_base_id=? AND k.tenant_id=? ORDER BY d.rowid DESC""", (knowledge_base_id, tenant_id)).fetchall()
+        return [Document(**dict(row)) for row in rows]
 
     def create_evaluation(self, evaluation_id: str, dataset_name: str, retrieval_mode: str, top_k: int) -> None:
         """Persist an evaluation request before a worker executes it."""

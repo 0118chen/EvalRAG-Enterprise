@@ -36,6 +36,12 @@ def create_knowledge_base(payload: KnowledgeBaseCreate, tenant_id: str) -> Knowl
     return kb
 
 
+@app.get("/api/v1/knowledge-bases", response_model=list[KnowledgeBase])
+def list_knowledge_bases(tenant_id: str) -> list[KnowledgeBase]:
+    """List only knowledge bases owned by the requested tenant."""
+    return store.list_knowledge_bases(tenant_id)
+
+
 @app.post("/api/v1/documents", response_model=Document, status_code=201)
 async def upload_document(tenant_id: str = Form(...), knowledge_base_id: str = Form(...), file: UploadFile = File(...)) -> Document:
     kb = store.get_knowledge_base(knowledge_base_id, tenant_id)
@@ -75,6 +81,13 @@ def get_document(document_id: str, tenant_id: str) -> Document:
     if not document:
         raise HTTPException(status_code=404, detail="document not found")
     return document
+
+
+@app.get("/api/v1/knowledge-bases/{knowledge_base_id}/documents", response_model=list[Document])
+def list_documents(knowledge_base_id: str, tenant_id: str) -> list[Document]:
+    if not store.get_knowledge_base(knowledge_base_id, tenant_id):
+        raise HTTPException(status_code=404, detail="knowledge base not found")
+    return store.list_documents(knowledge_base_id, tenant_id)
 
 
 @app.post("/api/v1/retrieval/search", response_model=Answer)
