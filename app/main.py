@@ -1,6 +1,7 @@
 from uuid import uuid4
 from pathlib import Path
 import re
+import json
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -202,6 +203,9 @@ async def chat_stream(payload: SearchRequest) -> StreamingResponse:
     answer, evidence = await answer_question(get_llm(), payload.question, chunks, payload.top_k, payload.retrieval_mode, retriever)
 
     async def events():
+        citations = [{"document_id": chunk.document_id, "page": chunk.page, "text": chunk.text} for chunk in evidence]
+        yield "event: citations\n"
+        yield f"data: {json.dumps(citations, ensure_ascii=False)}\n\n"
         for token in stream_text(answer):
             yield f"data: {token}\n\n"
         yield "data: [DONE]\n\n"
