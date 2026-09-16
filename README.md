@@ -4,6 +4,8 @@
 
 当前版本提供可运行的 FastAPI MVP：健康检查、知识库创建、租户隔离、PDF/DOCX/TXT/Markdown 上传、结构化分块、关键词/混合检索、引用、反馈和评测任务接口，以及可选的 LangSmith 观测配置。`app/core/evaluation.py` 同时提供可复用的 Recall@K、MRR 计算基础。
 
+问答接口 `POST /api/v1/chat/stream` 在 `hybrid` 模式下会并行运行 Dense/Sparse Retriever，再使用 RRF 融合结果。当前本地 Dense 实现用于离线开发；生产环境可替换为 Milvus 和 Elasticsearch 后端。
+
 ```bash
 python -m venv .venv
 pip install -e ".[dev]"

@@ -11,6 +11,7 @@ from app.core.store import SQLiteStore
 from app.core.llm import MockLLM, OpenAICompatibleLLM
 from app.core.rag import answer_question, stream_text
 from app.core.pipeline import default_pipeline
+from app.core.backends import HybridRetriever, LocalRetriever
 from app.schemas import Answer, Document, EvaluationCreate, FeedbackRequest, KnowledgeBase, KnowledgeBaseCreate, SearchRequest
 
 app = FastAPI(title="EvalRAG Enterprise", version="0.1.0")
@@ -93,7 +94,9 @@ async def chat_stream(payload: SearchRequest) -> StreamingResponse:
     kb = store.get_knowledge_base(payload.knowledge_base_id, payload.tenant_id)
     if not kb:
         raise HTTPException(status_code=404, detail="knowledge base not found")
-    answer, evidence = await answer_question(get_llm(), payload.question, store.get_chunks(kb.id), payload.top_k, payload.retrieval_mode)
+    chunks = store.get_chunks(kb.id)
+    retriever = HybridRetriever(LocalRetriever(chunks, "dense"), LocalRetriever(chunks, "sparse")) if payload.retrieval_mode == "hybrid" else LocalRetriever(chunks, payload.retrieval_mode)
+    answer, evidence = await answer_question(get_llm(), payload.question, chunks, payload.top_k, payload.retrieval_mode, retriever)
 
     async def events():
         for token in stream_text(answer):
