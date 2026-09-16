@@ -23,6 +23,8 @@ def process_document(document_id: str) -> dict[str, str]:
     document = store.get_document_any(document_id)
     if not document:
         return {"document_id": document_id, "status": "failed", "stage": "missing"}
+    if document.status == "ready":
+        return {"document_id": document_id, "status": "ready", "stage": "already_indexed", "progress": "100"}
     try:
         store.update_document_progress(document_id, 20)
         upload_dir = Path("data/uploads")
@@ -40,8 +42,8 @@ def process_document(document_id: str) -> dict[str, str]:
     except Exception as exc:
         store.update_document_status(document_id, "failed")
         store.update_document_progress(document_id, 0, str(exc))
-        return {"document_id": document_id, "status": "failed", "stage": "error", "progress": "0"}
+        raise
 
 
 if celery_app is not None:
-    process_document = celery_app.task(name="evalrag.process_document")(process_document)
+    process_document = celery_app.task(name="evalrag.process_document", autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})(process_document)
