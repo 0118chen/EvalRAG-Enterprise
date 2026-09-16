@@ -6,7 +6,9 @@ client = TestClient(app)
 
 
 def test_health() -> None:
-    assert client.get("/health").json()["status"] == "ok"
+    response = client.get("/health", headers={"X-Request-ID": "req-test-1"})
+    assert response.json()["status"] == "ok"
+    assert response.headers["X-Request-ID"] == "req-test-1"
 
 
 def test_tenant_isolation() -> None:

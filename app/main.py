@@ -4,6 +4,8 @@ import re
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from app.config import get_settings
 from app.core.observability import TraceManager, redact
@@ -18,6 +20,20 @@ from app.schemas import Answer, Document, EvaluationCreate, FeedbackRequest, Kno
 from app.tasks import process_document
 
 app = FastAPI(title="EvalRAG Enterprise", version="0.1.0")
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Attach a stable request identifier to every response for trace correlation."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
 settings = get_settings()
 traces = TraceManager(settings)
 store = SQLiteStore()
@@ -91,11 +107,12 @@ def list_documents(knowledge_base_id: str, tenant_id: str) -> list[Document]:
 
 
 @app.post("/api/v1/retrieval/search", response_model=Answer)
-def search(payload: SearchRequest) -> Answer:
+def search(payload: SearchRequest, request: Request) -> Answer:
     kb = store.get_knowledge_base(payload.knowledge_base_id, payload.tenant_id)
     if not kb:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     metadata = traces.metadata(tenant_id=payload.tenant_id, knowledge_base_id=kb.id, retrieval_mode=payload.retrieval_mode)
+    metadata["request_id"] = request.state.request_id
     results = retrieve(payload.question, store.get_chunks(kb.id), payload.top_k, payload.retrieval_mode)
     citations = [{"document_id": chunk.document_id, "page": chunk.page, "score": score, "text": chunk.text} for chunk, score in results if score > 0]
     if not citations:
