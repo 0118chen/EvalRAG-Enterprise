@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -18,6 +18,7 @@ from app.core.pipeline import default_pipeline
 from app.core.backends import HybridRetriever, LocalRetriever
 from app.schemas import Answer, Document, EvaluationCreate, FeedbackRequest, KnowledgeBase, KnowledgeBaseCreate, SearchRequest
 from app.tasks import process_document
+from app.core.metrics import Metrics
 
 app = FastAPI(title="EvalRAG Enterprise", version="0.1.0")
 
@@ -34,6 +35,18 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(RequestIDMiddleware)
+metrics = Metrics()
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        started = __import__("time").perf_counter()
+        response = await call_next(request)
+        metrics.observe(request.url.path, response.status_code, __import__("time").perf_counter() - started)
+        return response
+
+
+app.add_middleware(MetricsMiddleware)
 settings = get_settings()
 traces = TraceManager(settings)
 store = SQLiteStore()
@@ -43,6 +56,11 @@ pipeline = default_pipeline()
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "environment": settings.app_env}
+
+
+@app.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
+def prometheus_metrics() -> str:
+    return metrics.render()
 
 
 @app.post("/api/v1/knowledge-bases", response_model=KnowledgeBase, status_code=201)

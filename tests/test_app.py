@@ -9,6 +9,8 @@ def test_health() -> None:
     response = client.get("/health", headers={"X-Request-ID": "req-test-1"})
     assert response.json()["status"] == "ok"
     assert response.headers["X-Request-ID"] == "req-test-1"
+    metrics = client.get("/metrics").text
+    assert "evalrag_http_requests_total" in metrics
 
 
 def test_tenant_isolation() -> None:
