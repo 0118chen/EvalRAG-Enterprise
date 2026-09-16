@@ -67,6 +67,14 @@ def delete_document(document_id: str, tenant_id: str) -> None:
         raise HTTPException(status_code=404, detail="document not found")
 
 
+@app.get("/api/v1/documents/{document_id}", response_model=Document)
+def get_document(document_id: str, tenant_id: str) -> Document:
+    document = store.get_document(document_id, tenant_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="document not found")
+    return document
+
+
 @app.post("/api/v1/retrieval/search", response_model=Answer)
 def search(payload: SearchRequest) -> Answer:
     kb = store.get_knowledge_base(payload.knowledge_base_id, payload.tenant_id)

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     milvus_token: str | None = None
     elasticsearch_url: str = "http://localhost:9200"
     elasticsearch_api_key: str | None = None
+    redis_url: str = "redis://localhost:6379/0"
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

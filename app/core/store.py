@@ -72,3 +72,9 @@ class SQLiteStore:
         with self._connect() as connection:
             rows = connection.execute("SELECT id, document_id, page, text FROM chunks WHERE knowledge_base_id=?", (kb_id,)).fetchall()
         return [Chunk(**dict(row)) for row in rows]
+
+    def get_document(self, document_id: str, tenant_id: str) -> Document | None:
+        with self._connect() as connection:
+            row = connection.execute("""SELECT d.* FROM documents d JOIN knowledge_bases k ON k.id=d.knowledge_base_id
+                                        WHERE d.id=? AND k.tenant_id=?""", (document_id, tenant_id)).fetchone()
+        return Document(**dict(row)) if row else None
