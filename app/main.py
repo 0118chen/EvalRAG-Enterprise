@@ -1,11 +1,13 @@
 from uuid import uuid4
+from pathlib import Path
+import re
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
 from app.core.observability import TraceManager, redact
-from app.core.ingestion import Chunk, chunk_pages, extract_text
+from app.core.ingestion import Chunk
 from app.core.retrieval import retrieve
 from app.core.store import SQLiteStore
 from app.core.llm import MockLLM, OpenAICompatibleLLM
@@ -13,6 +15,7 @@ from app.core.rag import answer_question, stream_text
 from app.core.pipeline import default_pipeline
 from app.core.backends import HybridRetriever, LocalRetriever
 from app.schemas import Answer, Document, EvaluationCreate, FeedbackRequest, KnowledgeBase, KnowledgeBaseCreate, SearchRequest
+from app.tasks import process_document
 
 app = FastAPI(title="EvalRAG Enterprise", version="0.1.0")
 settings = get_settings()
@@ -39,28 +42,24 @@ async def upload_document(tenant_id: str = Form(...), knowledge_base_id: str = F
     if not kb:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     document_id = str(uuid4())
-    try:
-        pages = extract_text(file.filename or "document.txt", await file.read())
-        chunks = chunk_pages(document_id, pages)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    document = Document(id=document_id, filename=file.filename or "document.txt", knowledge_base_id=kb.id, chunks=len(chunks), status="pending", progress=10)
+    filename = file.filename or "document.txt"
+    if not re.search(r"\.(pdf|docx|txt|md)$", filename.lower()):
+        raise HTTPException(status_code=400, detail="supported file types: pdf, docx, txt, md")
+    upload_dir = Path("data/uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r"[^\w.\-]", "_", filename)
+    (upload_dir / f"{document_id}_{safe_name}").write_bytes(await file.read())
+    document = Document(id=document_id, filename=filename, knowledge_base_id=kb.id, chunks=0, status="pending", progress=0)
     try:
         store.save_document(document, [])
-        store.update_document_progress(document_id, 50)
-        await pipeline.index(chunks)
-        store.update_document_status(document_id, "ready")
-        store.update_document_progress(document_id, 100)
-        document = document.model_copy(update={"status": "ready", "progress": 100})
-        with store._lock, store._connect() as connection:
-            connection.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, kb.id) for c in chunks])
+        if celery_app_available := hasattr(process_document, "delay"):
+            process_document.delay(document_id)
+        else:
+            raise RuntimeError("Celery worker is not available")
     except Exception as exc:
-        try:
-            store.update_document_status(document_id, "failed")
-            store.update_document_progress(document_id, 0, str(exc))
-        except Exception:
-            store.save_document(document.model_copy(update={"status": "failed", "chunks": 0}), [])
-        raise HTTPException(status_code=503, detail="document indexing failed") from exc
+        store.update_document_status(document_id, "failed")
+        store.update_document_progress(document_id, 0, str(exc))
+        raise HTTPException(status_code=503, detail="document task could not be queued") from exc
     return document
 
 

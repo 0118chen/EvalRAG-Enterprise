@@ -1,6 +1,10 @@
 """Celery entrypoint for production document processing."""
 
+from pathlib import Path
 from app.config import get_settings
+from app.core.ingestion import chunk_pages, extract_text
+from app.core.pipeline import default_pipeline
+from app.core.store import SQLiteStore
 
 settings = get_settings()
 
@@ -13,8 +17,29 @@ except ImportError:  # pragma: no cover - dependencies are installed in producti
 
 
 def process_document(document_id: str) -> dict[str, str]:
-    """Stable task contract; the ingestion worker will call the pipeline in the next stage."""
-    return {"document_id": document_id, "status": "accepted", "stage": "queued", "progress": "0"}
+    """Process one persisted upload; Celery retries can safely re-run this task."""
+    store = SQLiteStore()
+    document = store.get_document_any(document_id)
+    if not document:
+        return {"document_id": document_id, "status": "failed", "stage": "missing"}
+    try:
+        store.update_document_progress(document_id, 20)
+        upload_dir = Path("data/uploads")
+        source = next(upload_dir.glob(f"{document_id}_*"))
+        pages = extract_text(source.name, source.read_bytes())
+        chunks = chunk_pages(document_id, pages)
+        store.update_document_progress(document_id, 60)
+        import asyncio
+        asyncio.run(default_pipeline().index(chunks))
+        with store._lock, store._connect() as connection:
+            connection.executemany("INSERT OR REPLACE INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, document.knowledge_base_id) for c in chunks])
+        store.update_document_status(document_id, "ready")
+        store.update_document_progress(document_id, 100)
+        return {"document_id": document_id, "status": "ready", "stage": "indexed", "progress": "100"}
+    except Exception as exc:
+        store.update_document_status(document_id, "failed")
+        store.update_document_progress(document_id, 0, str(exc))
+        return {"document_id": document_id, "status": "failed", "stage": "error", "progress": "0"}
 
 
 if celery_app is not None:
