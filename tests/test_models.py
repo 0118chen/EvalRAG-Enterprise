@@ -2,6 +2,6 @@ from app.db.models import Base, DocumentRecord, KnowledgeBaseRecord
 
 
 def test_database_models_have_expected_tables() -> None:
-    assert set(Base.metadata.tables) == {"knowledge_bases", "documents"}
+    assert set(Base.metadata.tables) == {"knowledge_bases", "documents", "evaluations"}
     assert DocumentRecord.__tablename__ == "documents"
     assert KnowledgeBaseRecord.__tablename__ == "knowledge_bases"
