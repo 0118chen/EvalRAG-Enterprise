@@ -14,9 +14,8 @@ except ImportError:  # pragma: no cover - dependencies are installed in producti
 
 def process_document(document_id: str) -> dict[str, str]:
     """Stable task contract; the ingestion worker will call the pipeline in the next stage."""
-    return {"document_id": document_id, "status": "accepted"}
+    return {"document_id": document_id, "status": "accepted", "stage": "queued"}
 
 
 if celery_app is not None:
     process_document = celery_app.task(name="evalrag.process_document")(process_document)
-

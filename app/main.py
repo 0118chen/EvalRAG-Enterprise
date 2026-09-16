@@ -44,17 +44,20 @@ async def upload_document(tenant_id: str = Form(...), knowledge_base_id: str = F
         chunks = chunk_pages(document_id, pages)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    document = Document(id=document_id, filename=file.filename or "document.txt", knowledge_base_id=kb.id, chunks=len(chunks), status="pending")
+    document = Document(id=document_id, filename=file.filename or "document.txt", knowledge_base_id=kb.id, chunks=len(chunks), status="pending", progress=10)
     try:
         store.save_document(document, [])
+        store.update_document_progress(document_id, 50)
         await pipeline.index(chunks)
         store.update_document_status(document_id, "ready")
-        document = document.model_copy(update={"status": "ready"})
+        store.update_document_progress(document_id, 100)
+        document = document.model_copy(update={"status": "ready", "progress": 100})
         with store._lock, store._connect() as connection:
             connection.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, kb.id) for c in chunks])
     except Exception as exc:
         try:
             store.update_document_status(document_id, "failed")
+            store.update_document_progress(document_id, 0, str(exc))
         except Exception:
             store.save_document(document.model_copy(update={"status": "failed", "chunks": 0}), [])
         raise HTTPException(status_code=503, detail="document indexing failed") from exc

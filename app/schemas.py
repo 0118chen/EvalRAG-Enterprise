@@ -50,3 +50,5 @@ class Document(BaseModel):
     knowledge_base_id: str
     chunks: int
     status: str = "ready"
+    progress: int = Field(default=100, ge=0, le=100)
+    error_message: str | None = None
