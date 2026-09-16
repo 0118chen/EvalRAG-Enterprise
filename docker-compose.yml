@@ -1,4 +1,14 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evalrag
+      POSTGRES_USER: evalrag
+      POSTGRES_PASSWORD: evalrag
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -13,6 +23,7 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+      - postgres
 
   worker:
     build: .
@@ -21,6 +32,8 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+      - postgres
 
 volumes:
   redis_data:
+  postgres_data:

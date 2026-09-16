@@ -7,10 +7,18 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    op.create_table("knowledge_bases", sa.Column("id", sa.String(36), primary_key=True), sa.Column("tenant_id", sa.String(128), nullable=False), sa.Column("name", sa.String(100), nullable=False), sa.Column("description", sa.String(500), nullable=False), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
-    op.create_index("ix_knowledge_bases_tenant_id", "knowledge_bases", ["tenant_id"])
-    op.create_table("documents", sa.Column("id", sa.String(36), primary_key=True), sa.Column("filename", sa.String(255), nullable=False), sa.Column("knowledge_base_id", sa.String(36), sa.ForeignKey("knowledge_bases.id"), nullable=False), sa.Column("chunks", sa.Integer(), nullable=False, server_default="0"), sa.Column("status", sa.String(20), nullable=False, server_default="pending"), sa.Column("progress", sa.Integer(), nullable=False, server_default="0"), sa.Column("error_message", sa.Text()), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
-    op.create_index("ix_documents_knowledge_base_id", "documents", ["knowledge_base_id"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table("knowledge_bases"):
+        op.create_table("knowledge_bases", sa.Column("id", sa.String(36), primary_key=True), sa.Column("tenant_id", sa.String(128), nullable=False), sa.Column("name", sa.String(100), nullable=False), sa.Column("description", sa.String(500), nullable=False), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
+    if not inspector.has_table("documents"):
+        op.create_table("documents", sa.Column("id", sa.String(36), primary_key=True), sa.Column("filename", sa.String(255), nullable=False), sa.Column("knowledge_base_id", sa.String(36), sa.ForeignKey("knowledge_bases.id"), nullable=False), sa.Column("chunks", sa.Integer(), nullable=False, server_default="0"), sa.Column("status", sa.String(20), nullable=False, server_default="pending"), sa.Column("progress", sa.Integer(), nullable=False, server_default="0"), sa.Column("error_message", sa.Text()), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
+    indexes = {index["name"] for index in sa.inspect(bind).get_indexes("knowledge_bases")}
+    if "ix_knowledge_bases_tenant_id" not in indexes:
+        op.create_index("ix_knowledge_bases_tenant_id", "knowledge_bases", ["tenant_id"])
+    indexes = {index["name"] for index in sa.inspect(bind).get_indexes("documents")}
+    if "ix_documents_knowledge_base_id" not in indexes:
+        op.create_index("ix_documents_knowledge_base_id", "documents", ["knowledge_base_id"])
 
 def downgrade():
     op.drop_table("documents")

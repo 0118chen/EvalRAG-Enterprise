@@ -1,10 +1,19 @@
 from logging.config import fileConfig
+import os
+
 from alembic import context
 from app.db.models import Base
 
 config = context.config
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    # Keep migrations usable with the minimal project-level alembic.ini.
+    try:
+        fileConfig(config.config_file_name)
+    except KeyError:
+        pass
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
@@ -24,4 +33,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-
