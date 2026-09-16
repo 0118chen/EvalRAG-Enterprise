@@ -25,3 +25,9 @@ def test_management_lists_are_tenant_scoped() -> None:
     assert any(item["id"] == kb_id for item in client.get("/api/v1/knowledge-bases?tenant_id=tenant-list-a").json())
     assert client.get("/api/v1/knowledge-bases?tenant_id=tenant-list-b").json() == []
     assert client.get(f"/api/v1/knowledge-bases/{kb_id}/documents?tenant_id=tenant-list-b").status_code == 404
+
+
+def test_metrics_endpoint_is_prometheus_compatible() -> None:
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")

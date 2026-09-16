@@ -206,7 +206,7 @@ async def chat_stream(payload: SearchRequest) -> StreamingResponse:
         citations = [{"document_id": chunk.document_id, "page": chunk.page, "text": chunk.text} for chunk in evidence]
         yield "event: citations\n"
         yield f"data: {json.dumps(citations, ensure_ascii=False)}\n\n"
-        for token in stream_text(answer):
+        async for token in stream_text(answer):
             yield f"data: {token}\n\n"
         yield "data: [DONE]\n\n"
 
