@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     elasticsearch_url: str = "http://localhost:9200"
     elasticsearch_api_key: str | None = None
     redis_url: str = "redis://localhost:6379/0"
+    database_url: str = "sqlite:///data/evalrag.db"
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
