@@ -11,3 +11,5 @@ def test_disabled_tracing_is_safe() -> None:
     decorated = manager.traceable("test", {})
     assert decorated(lambda: "ok")() == "ok"
     assert len(tenant_hash("tenant-a")) == 16
+    with manager.context("offline", metadata={"request_id": "req-1"}):
+        assert True

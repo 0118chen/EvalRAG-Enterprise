@@ -22,7 +22,17 @@ class TraceManager:
     def context(self, name: str, *, metadata: dict[str, Any] | None = None):
         if not self.settings.langsmith_enabled or not self.settings.langsmith_api_key:
             return nullcontext()
-        return nullcontext()
+        try:
+            from langsmith import trace
+            return trace(
+                name,
+                run_type="chain",
+                project_name=self.settings.langsmith_project,
+                metadata=metadata or {},
+                exceptions_to_handle=(Exception,),
+            )
+        except Exception:
+            return nullcontext()
 
     def traceable(self, name: str, metadata: dict[str, Any]):
         """Return a LangSmith decorator when enabled, otherwise an identity decorator."""
