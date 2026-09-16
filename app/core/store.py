@@ -24,13 +24,16 @@ class SQLiteStore:
             );
             CREATE TABLE IF NOT EXISTS documents (
                 id TEXT PRIMARY KEY, filename TEXT NOT NULL, knowledge_base_id TEXT NOT NULL,
-                chunks INTEGER NOT NULL, FOREIGN KEY(knowledge_base_id) REFERENCES knowledge_bases(id)
+                chunks INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'ready', FOREIGN KEY(knowledge_base_id) REFERENCES knowledge_bases(id)
             );
             CREATE TABLE IF NOT EXISTS chunks (
                 id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page INTEGER NOT NULL,
                 text TEXT NOT NULL, knowledge_base_id TEXT NOT NULL
             );
             """)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(documents)")}
+            if "status" not in columns:
+                connection.execute("ALTER TABLE documents ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -48,7 +51,7 @@ class SQLiteStore:
 
     def save_document(self, document: Document, chunks: list[Chunk]) -> None:
         with self._lock, self._connect() as connection:
-            connection.execute("INSERT INTO documents VALUES (?, ?, ?, ?)", (document.id, document.filename, document.knowledge_base_id, document.chunks))
+            connection.execute("INSERT INTO documents VALUES (?, ?, ?, ?, ?)", (document.id, document.filename, document.knowledge_base_id, document.chunks, document.status))
             connection.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, document.knowledge_base_id) for c in chunks])
 
     def get_chunks(self, kb_id: str) -> list[Chunk]:

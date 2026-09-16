@@ -27,6 +27,20 @@ class HybridRetriever:
 
 
 @dataclass
+class ResilientRetriever:
+    """Use a production retriever when healthy and fall back without failing requests."""
+
+    primary: Retriever
+    fallback: Retriever
+
+    async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
+        try:
+            return await self.primary.search(query, top_k)
+        except (RuntimeError, ConnectionError, TimeoutError):
+            return await self.fallback.search(query, top_k)
+
+
+@dataclass
 class LocalRetriever:
     chunks: list[Chunk]
     mode: str = "hybrid"

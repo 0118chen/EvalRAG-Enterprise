@@ -49,3 +49,4 @@ class Document(BaseModel):
     filename: str
     knowledge_base_id: str
     chunks: int
+    status: str = "ready"
