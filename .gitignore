@@ -8,3 +8,5 @@ data/*.db
 data/uploads/
 dist/
 build/
+node_modules/
+frontend/dist/
