@@ -48,13 +48,20 @@ def search(payload: SearchRequest) -> Answer:
     kb = store.get_knowledge_base(payload.knowledge_base_id, payload.tenant_id)
     if not kb:
         raise HTTPException(status_code=404, detail="knowledge base not found")
-    _ = traces.metadata(tenant_id=payload.tenant_id, knowledge_base_id=kb.id, retrieval_mode=payload.retrieval_mode)
+    metadata = traces.metadata(tenant_id=payload.tenant_id, knowledge_base_id=kb.id, retrieval_mode=payload.retrieval_mode)
     results = retrieve(payload.question, store.get_chunks(kb.id), payload.top_k, payload.retrieval_mode)
     citations = [{"document_id": chunk.document_id, "page": chunk.page, "score": score, "text": chunk.text} for chunk, score in results if score > 0]
     if not citations:
         return Answer(answer="未找到足够依据，无法可靠回答该问题。", citations=[], trace_id=str(uuid4()))
-    return Answer(answer=f"基于知识库“{kb.name}”的相关资料，问题为：{redact(payload.question)}。请参考以下来源。",
-                  citations=citations, trace_id=str(uuid4()))
+    trace_id = str(uuid4())
+    metadata["citation_count"] = len(citations)
+    metadata["top_k"] = payload.top_k
+    # The decorator is a no-op when LangSmith is disabled, preserving local/offline operation.
+    @traces.traceable("rag_request", metadata)
+    def assemble() -> Answer:
+        return Answer(answer=f"基于知识库“{kb.name}”的相关资料，问题为：{redact(payload.question)}。请参考以下来源。",
+                      citations=citations, trace_id=trace_id)
+    return assemble()
 
 
 @app.post("/api/v1/feedback")

@@ -22,15 +22,20 @@ class TraceManager:
     def context(self, name: str, *, metadata: dict[str, Any] | None = None):
         if not self.settings.langsmith_enabled or not self.settings.langsmith_api_key:
             return nullcontext()
+        return nullcontext()
+
+    def traceable(self, name: str, metadata: dict[str, Any]):
+        """Return a LangSmith decorator when enabled, otherwise an identity decorator."""
+        if not self.settings.langsmith_enabled or not self.settings.langsmith_api_key:
+            return lambda function: function
         try:
             from langsmith import traceable
-            return traceable(name, process_inputs=lambda _: {"metadata": metadata or {}})
+            return traceable(name=name, metadata=metadata, process_inputs=lambda inputs: {"question": redact(str(inputs))})
         except Exception:
-            return nullcontext()
-
+            # Observability is best-effort: a missing SDK or telemetry outage must not break RAG.
+            return lambda function: function
     def metadata(self, *, tenant_id: str, knowledge_base_id: str, retrieval_mode: str) -> dict[str, Any]:
         return {"tenant_id_hash": tenant_hash(tenant_id), "knowledge_base_id": knowledge_base_id,
                 "retrieval_mode": retrieval_mode, "rag_version": self.settings.rag_version,
                 "prompt_version": self.settings.prompt_version, "llm_model": self.settings.llm_model,
                 "environment": self.settings.app_env}
-
