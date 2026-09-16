@@ -1,12 +1,15 @@
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
 from app.core.observability import TraceManager, redact
 from app.core.ingestion import Chunk, chunk_pages, extract_text
 from app.core.retrieval import retrieve
 from app.core.store import SQLiteStore
+from app.core.llm import MockLLM, OpenAICompatibleLLM
+from app.core.rag import answer_question, stream_text
 from app.schemas import Answer, Document, EvaluationCreate, FeedbackRequest, KnowledgeBase, KnowledgeBaseCreate, SearchRequest
 
 app = FastAPI(title="EvalRAG Enterprise", version="0.1.0")
@@ -72,3 +75,26 @@ def feedback(payload: FeedbackRequest) -> dict[str, str]:
 @app.post("/api/v1/evaluations")
 def create_evaluation(payload: EvaluationCreate) -> dict[str, str | int]:
     return {"status": "queued", "dataset_name": payload.dataset_name, "retrieval_mode": payload.retrieval_mode, "top_k": payload.top_k}
+
+
+def get_llm():
+    if settings.llm_provider == "mock":
+        return MockLLM()
+    if not settings.llm_api_key:
+        raise HTTPException(status_code=503, detail="LLM provider is not configured")
+    return OpenAICompatibleLLM(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
+
+
+@app.post("/api/v1/chat/stream")
+async def chat_stream(payload: SearchRequest) -> StreamingResponse:
+    kb = store.get_knowledge_base(payload.knowledge_base_id, payload.tenant_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="knowledge base not found")
+    answer, evidence = await answer_question(get_llm(), payload.question, store.get_chunks(kb.id), payload.top_k, payload.retrieval_mode)
+
+    async def events():
+        for token in stream_text(answer):
+            yield f"data: {token}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
