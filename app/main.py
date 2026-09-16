@@ -105,7 +105,17 @@ def feedback(payload: FeedbackRequest) -> dict[str, str]:
 
 @app.post("/api/v1/evaluations")
 def create_evaluation(payload: EvaluationCreate) -> dict[str, str | int]:
-    return {"status": "queued", "dataset_name": payload.dataset_name, "retrieval_mode": payload.retrieval_mode, "top_k": payload.top_k}
+    evaluation_id = str(uuid4())
+    store.create_evaluation(evaluation_id, payload.dataset_name, payload.retrieval_mode, payload.top_k)
+    return {"id": evaluation_id, "status": "queued", "dataset_name": payload.dataset_name, "retrieval_mode": payload.retrieval_mode, "top_k": payload.top_k}
+
+
+@app.get("/api/v1/evaluations/{evaluation_id}")
+def get_evaluation(evaluation_id: str) -> dict[str, str | int]:
+    evaluation = store.get_evaluation(evaluation_id)
+    if not evaluation:
+        raise HTTPException(status_code=404, detail="evaluation not found")
+    return evaluation
 
 
 def get_llm():

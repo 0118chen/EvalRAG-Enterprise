@@ -31,3 +31,12 @@ class DocumentRecord(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+
+class EvaluationRecord(Base):
+    __tablename__ = "evaluations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    dataset_name: Mapped[str] = mapped_column(String(200))
+    retrieval_mode: Mapped[str] = mapped_column(String(20))
+    top_k: Mapped[int] = mapped_column(Integer, default=5)
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

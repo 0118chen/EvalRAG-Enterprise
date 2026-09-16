@@ -19,6 +19,8 @@ def upgrade():
     indexes = {index["name"] for index in sa.inspect(bind).get_indexes("documents")}
     if "ix_documents_knowledge_base_id" not in indexes:
         op.create_index("ix_documents_knowledge_base_id", "documents", ["knowledge_base_id"])
+    if not sa.inspect(bind).has_table("evaluations"):
+        op.create_table("evaluations", sa.Column("id", sa.String(36), primary_key=True), sa.Column("dataset_name", sa.String(200), nullable=False), sa.Column("retrieval_mode", sa.String(20), nullable=False), sa.Column("top_k", sa.Integer(), nullable=False, server_default="5"), sa.Column("status", sa.String(20), nullable=False, server_default="queued"), sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()))
 
 def downgrade():
     op.drop_table("documents")

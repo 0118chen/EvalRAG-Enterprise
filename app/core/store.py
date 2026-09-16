@@ -39,6 +39,7 @@ class SQLiteStore:
                 connection.execute("ALTER TABLE documents ADD COLUMN progress INTEGER NOT NULL DEFAULT 100")
             if "error_message" not in columns:
                 connection.execute("ALTER TABLE documents ADD COLUMN error_message TEXT")
+            connection.execute("CREATE TABLE IF NOT EXISTS evaluations (id TEXT PRIMARY KEY, dataset_name TEXT NOT NULL, retrieval_mode TEXT NOT NULL, top_k INTEGER NOT NULL, status TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -92,3 +93,13 @@ class SQLiteStore:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
         return Document(**dict(row)) if row else None
+
+    def create_evaluation(self, evaluation_id: str, dataset_name: str, retrieval_mode: str, top_k: int) -> None:
+        """Persist an evaluation request before a worker executes it."""
+        with self._lock, self._connect() as connection:
+            connection.execute("INSERT INTO evaluations (id, dataset_name, retrieval_mode, top_k, status) VALUES (?, ?, ?, ?, 'queued')", (evaluation_id, dataset_name, retrieval_mode, top_k))
+
+    def get_evaluation(self, evaluation_id: str) -> dict | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM evaluations WHERE id=?", (evaluation_id,)).fetchone()
+        return dict(row) if row else None
