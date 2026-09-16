@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     rag_version: str = "v0.1.0"
     prompt_version: str = "policy_qa_v1"
+    milvus_uri: str = "http://localhost:19530"
+    milvus_token: str | None = None
+    elasticsearch_url: str = "http://localhost:9200"
+    elasticsearch_api_key: str | None = None
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
