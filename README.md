@@ -19,4 +19,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
+启动异步 Worker：
+
+```bash
+docker compose up --build api worker redis
+```
+
+上传接口只负责入队，Worker 负责解析和索引；通过 `GET /api/v1/documents/{document_id}` 查询 `pending/ready/failed`、进度和错误原因。
+
 复制 `.env.example` 为 `.env`，填入 `LANGSMITH_API_KEY` 并设置 `LANGSMITH_ENABLED=true`。生产环境应仅发送脱敏 metadata、文档 ID、页码和受控摘要，不上传完整原文。LangSmith 不可用时不应阻塞主业务。

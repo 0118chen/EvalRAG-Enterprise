@@ -1,8 +1,26 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
   api:
     build: .
     env_file: .env
     ports:
       - "8000:8000"
     restart: unless-stopped
+    depends_on:
+      - redis
 
+  worker:
+    build: .
+    env_file: .env
+    command: celery -A app.tasks.celery_app worker --loglevel=INFO --concurrency=2
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
