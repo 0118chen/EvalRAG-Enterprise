@@ -4,6 +4,6 @@ __pycache__/
 .pytest_cache/
 .env
 *.egg-info/
+data/*.db
 dist/
 build/
-
