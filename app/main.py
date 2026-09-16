@@ -10,12 +10,14 @@ from app.core.retrieval import retrieve
 from app.core.store import SQLiteStore
 from app.core.llm import MockLLM, OpenAICompatibleLLM
 from app.core.rag import answer_question, stream_text
+from app.core.pipeline import default_pipeline
 from app.schemas import Answer, Document, EvaluationCreate, FeedbackRequest, KnowledgeBase, KnowledgeBaseCreate, SearchRequest
 
 app = FastAPI(title="EvalRAG Enterprise", version="0.1.0")
 settings = get_settings()
 traces = TraceManager(settings)
 store = SQLiteStore()
+pipeline = default_pipeline()
 
 
 @app.get("/health")
@@ -41,6 +43,7 @@ async def upload_document(tenant_id: str = Form(...), knowledge_base_id: str = F
         chunks = chunk_pages(document_id, pages)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await pipeline.index(chunks)
     document = Document(id=document_id, filename=file.filename or "document.txt", knowledge_base_id=kb.id, chunks=len(chunks))
     store.save_document(document, chunks)
     return document
