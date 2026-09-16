@@ -39,6 +39,8 @@ class EvaluationRecord(Base):
     retrieval_mode: Mapped[str] = mapped_column(String(20))
     top_k: Mapped[int] = mapped_column(Integer, default=5)
     status: Mapped[str] = mapped_column(String(20), default="queued")
+    results_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

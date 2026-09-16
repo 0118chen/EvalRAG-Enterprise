@@ -120,6 +120,22 @@ def get_evaluation(evaluation_id: str) -> dict[str, str | int]:
     return evaluation
 
 
+@app.get("/api/v1/evaluations/{evaluation_id}/results")
+def get_evaluation_results(evaluation_id: str) -> dict:
+    evaluation = store.get_evaluation(evaluation_id)
+    if not evaluation:
+        raise HTTPException(status_code=404, detail="evaluation not found")
+    return {"id": evaluation_id, "status": evaluation["status"], "results": evaluation["results"]}
+
+
+@app.get("/api/v1/evaluations/{evaluation_id}/compare")
+def compare_evaluation(evaluation_id: str) -> dict:
+    evaluation = store.get_evaluation(evaluation_id)
+    if not evaluation:
+        raise HTTPException(status_code=404, detail="evaluation not found")
+    return {"evaluation_id": evaluation_id, "dataset_name": evaluation["dataset_name"], "current": evaluation["results"], "baseline": None, "message": "baseline comparison will be available after a second completed experiment"}
+
+
 def get_llm():
     if settings.llm_provider == "mock":
         return MockLLM()

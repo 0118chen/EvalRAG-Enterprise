@@ -5,6 +5,7 @@ without changing the API or retrieval code.
 """
 
 import sqlite3
+import json
 from pathlib import Path
 from threading import Lock
 
@@ -40,6 +41,11 @@ class SQLiteStore:
             if "error_message" not in columns:
                 connection.execute("ALTER TABLE documents ADD COLUMN error_message TEXT")
             connection.execute("CREATE TABLE IF NOT EXISTS evaluations (id TEXT PRIMARY KEY, dataset_name TEXT NOT NULL, retrieval_mode TEXT NOT NULL, top_k INTEGER NOT NULL, status TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+            evaluation_columns = {row[1] for row in connection.execute("PRAGMA table_info(evaluations)")}
+            if "results_json" not in evaluation_columns:
+                connection.execute("ALTER TABLE evaluations ADD COLUMN results_json TEXT")
+            if "error_message" not in evaluation_columns:
+                connection.execute("ALTER TABLE evaluations ADD COLUMN error_message TEXT")
             connection.execute("CREATE TABLE IF NOT EXISTS feedback (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, feedback TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '', rag_version TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
 
     def _connect(self) -> sqlite3.Connection:
@@ -103,7 +109,15 @@ class SQLiteStore:
     def get_evaluation(self, evaluation_id: str) -> dict | None:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM evaluations WHERE id=?", (evaluation_id,)).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        result["results"] = json.loads(result.pop("results_json")) if result.get("results_json") else None
+        return result
+
+    def update_evaluation(self, evaluation_id: str, status: str, results: dict | None = None, error_message: str | None = None) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute("UPDATE evaluations SET status=?, results_json=?, error_message=? WHERE id=?", (status, json.dumps(results, ensure_ascii=False) if results is not None else None, error_message, evaluation_id))
 
     def save_feedback(self, feedback_id: str, trace_id: str, feedback: str, comment: str, rag_version: str, prompt_version: str) -> None:
         """Store user feedback as a durable signal for evaluation dataset curation."""
