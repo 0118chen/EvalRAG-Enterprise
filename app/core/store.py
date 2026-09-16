@@ -54,6 +54,20 @@ class SQLiteStore:
             connection.execute("INSERT INTO documents VALUES (?, ?, ?, ?, ?)", (document.id, document.filename, document.knowledge_base_id, document.chunks, document.status))
             connection.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, document.knowledge_base_id) for c in chunks])
 
+    def update_document_status(self, document_id: str, status: str) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute("UPDATE documents SET status=? WHERE id=?", (status, document_id))
+
+    def delete_document(self, document_id: str, tenant_id: str) -> bool:
+        with self._lock, self._connect() as connection:
+            row = connection.execute("""SELECT d.id FROM documents d JOIN knowledge_bases k ON k.id=d.knowledge_base_id
+                                        WHERE d.id=? AND k.tenant_id=?""", (document_id, tenant_id)).fetchone()
+            if not row:
+                return False
+            connection.execute("DELETE FROM chunks WHERE document_id=?", (document_id,))
+            connection.execute("DELETE FROM documents WHERE id=?", (document_id,))
+            return True
+
     def get_chunks(self, kb_id: str) -> list[Chunk]:
         with self._connect() as connection:
             rows = connection.execute("SELECT id, document_id, page, text FROM chunks WHERE knowledge_base_id=?", (kb_id,)).fetchall()

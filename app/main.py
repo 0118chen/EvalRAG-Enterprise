@@ -38,16 +38,33 @@ async def upload_document(tenant_id: str = Form(...), knowledge_base_id: str = F
     kb = store.get_knowledge_base(knowledge_base_id, tenant_id)
     if not kb:
         raise HTTPException(status_code=404, detail="knowledge base not found")
+    document_id = str(uuid4())
     try:
         pages = extract_text(file.filename or "document.txt", await file.read())
-        document_id = str(uuid4())
         chunks = chunk_pages(document_id, pages)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await pipeline.index(chunks)
-    document = Document(id=document_id, filename=file.filename or "document.txt", knowledge_base_id=kb.id, chunks=len(chunks))
-    store.save_document(document, chunks)
+    document = Document(id=document_id, filename=file.filename or "document.txt", knowledge_base_id=kb.id, chunks=len(chunks), status="pending")
+    try:
+        store.save_document(document, [])
+        await pipeline.index(chunks)
+        store.update_document_status(document_id, "ready")
+        document = document.model_copy(update={"status": "ready"})
+        with store._lock, store._connect() as connection:
+            connection.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, kb.id) for c in chunks])
+    except Exception as exc:
+        try:
+            store.update_document_status(document_id, "failed")
+        except Exception:
+            store.save_document(document.model_copy(update={"status": "failed", "chunks": 0}), [])
+        raise HTTPException(status_code=503, detail="document indexing failed") from exc
     return document
+
+
+@app.delete("/api/v1/documents/{document_id}", status_code=204)
+def delete_document(document_id: str, tenant_id: str) -> None:
+    if not store.delete_document(document_id, tenant_id):
+        raise HTTPException(status_code=404, detail="document not found")
 
 
 @app.post("/api/v1/retrieval/search", response_model=Answer)
