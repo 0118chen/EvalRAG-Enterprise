@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     retrieval_candidate_multiplier: int = 4
     evaluation_inline_fallback: bool = False
     max_upload_mb: int = 50
+    health_checks_public: bool = False
+    health_admin_token: str | None = None
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

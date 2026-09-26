@@ -1,10 +1,10 @@
 from time import perf_counter
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 
-from app.api.deps import get_container, get_llm
+from app.api.deps import get_container, get_llm, require_health_admin
 
 router = APIRouter()
 
@@ -33,7 +33,10 @@ def readiness(request: Request) -> dict[str, str]:
 
 
 @router.get("/health/llm")
-async def llm_health(request: Request) -> dict:
+async def llm_health(
+    request: Request,
+    _admin: None = Depends(require_health_admin),
+) -> dict:
     container = get_container(request)
     settings = container.settings
     if settings.llm_provider == "mock":
@@ -68,7 +71,10 @@ async def llm_health(request: Request) -> dict:
 
 
 @router.get("/health/langsmith")
-def langsmith_health(request: Request):
+def langsmith_health(
+    request: Request,
+    _admin: None = Depends(require_health_admin),
+):
     result = get_container(request).langsmith.health()
     if result["status"] == "error":
         return JSONResponse(status_code=503, content=result)
