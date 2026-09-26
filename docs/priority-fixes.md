@@ -10,10 +10,11 @@
   - 位置：`app/api/routes/evaluations.py`、`app/core/langsmith_eval.py`
   - 验收：两个租户创建同名 Dataset 后映射到不同远端名称；测试覆盖同步与实验查询。
 
-- [ ] **修复 Redis 故障降级异常类型**
+- [x] **修复 Redis 故障降级异常类型**（2026-09-27 完成）
   - 风险：Redis 断连时 Cache/Rate Limit 抛出未处理异常，API 返回 500。
   - 位置：`app/core/cache.py`、`app/core/rate_limit.py`
   - 验收：捕获 `redis.exceptions.RedisError`；Redis 不可用时按既定策略降级；补充集成或故障注入测试。
+  - 结果：两个后端改为捕获 `redis.exceptions.RedisError`（redis-py 的连接/超时异常是它的子类，此前捕获的内建 `ConnectionError`/`TimeoutError` 永远匹配不到）。缓存读失败按 miss 处理并打 warning；限流失败 fail-open 放行并打 warning；新增 `REDIS_FAILURES` 常量集中声明。
 
 - [ ] **保护真实 LLM/LangSmith 健康检查**
   - 风险：公开 `/health/llm` 可被匿名重复调用并产生模型费用，且绕过 `/api/` 限流。
@@ -82,6 +83,44 @@
 - 验证命令及结果：pytest `95 passed`；ruff 通过；Docker 全链路冒烟中 SSE 事件顺序为 `retrieval → citations → token → trace → done`，首 token 在 1.0 秒左右到达。
 - 仍存在的限制：首 token 时序由单元测试与本地 Docker 冒烟共同证明，未做真实公网 + Nginx 生产链路的 TTFT 压测；未验证反向代理缓冲配置在高并发下的表现。
 
+## 已完成事项复盘（2026-09-27：工程化加固）
+
+### 事项四：上传流式写入
+
+- 根因：`app/api/routes/documents.py` 先 `await file.read()` 把整个上传读进内存，再做大小判断；超限请求在拒绝之前已经占用完整内存，`MAX_UPLOAD_MB` 不能真正防御内存耗尽。
+- 设计选择：新增 `_stream_upload_to_disk()`，以固定 1 MiB 分块边读边写，累计超过上限立即抛 413 并停止读取；写入目标为同目录 `.part` 临时文件，成功后 `replace()` 原子改名；空文件返回 400；任何失败路径（含 413）都会删除临时文件。文件句柄写入通过 `run_blocking()` 交给线程，避免在事件循环上做同步磁盘 I/O。若 multipart 已给出 `file.size`，先用它做一次廉价预判。
+- 替代方案与取舍：没有引入 `aiofiles` 或先落盘再校验的新依赖路径——分块读取 + 临时文件已能满足「内存上限与请求体大小解耦」，代价是多一次 rename（同文件系统内为原子操作）。也没有在反代层设置小 `client_max_body_size` 代替应用层校验，因为该值需要与 `MAX_UPLOAD_MB` 双处维护且无法覆盖直连 API 的场景。
+- 新增测试：`tests/test_upload_streaming.py`（分块上限、超限提前中止读取、只剩 `.part` 被清理、空文件 400、HTTP 201 落盘路径与队列投递）。
+- 验证命令及结果：`pytest` 全绿；Docker 全栈冒烟中上传 → `pending` → Worker → `ready`（`chunks=1`）通过；`data/uploads` 下无残留 `.part`。
+- 仍存在的限制：未校验 magic/MIME；解析阶段仍无超时与内存上限；上传目录仍是共享本地卷。
+
+### 事项五：Celery 并发幂等
+
+- 根因：`process_document` 直接进行「读取当前状态 → 解析 → 写索引 → 置 ready」，没有任何抢占步骤。Celery 是 at-least-once 投递（worker 崩溃、broker 重投、`--force` 重建与定时重试都会造成同一文档被并发处理），两个 worker 会同时对同一文档重复解析、重复写外部索引、重复覆盖状态。
+- 设计选择：数据库原子状态迁移。新增 `Store.claim_document()`，执行 `UPDATE documents SET status='processing' WHERE id=:id AND status IN ('pending','failed',...)`，通过 `cast(CursorResult, result).rowcount` 判断是否抢到；`process_document` 第一步 claim，抢不到就直接返回 `{'stage': 'not_claimed'}` 并结束，不抛异常（避免 Celery 重试放大竞争）。`--force` 重建走显式的 `force=True` 分支，否则已是 `ready` 的文档不会被重复处理。
+- 替代方案与取舍：没有引入 Redis 分布式锁或 Celery `task_id` 去重——锁需要额外的过期与续租逻辑，去重只能防止同一任务 ID 重复投递，都防不住“不同任务处理同一文档”。数据库行级原子更新的条件与状态机本身保持一致，天然跨进程、跨语言、无额外依赖，代价是把幂等责任放在数据库上（由此单条 UPDATE 的行锁成为竞争点，但每文档一次，热路径不在它上面）。也没有使用 `SELECT ... FOR UPDATE`：需要显式事务与重试语义，而条件 UPDATE 更短、更贴近状态机。
+- 新增测试：`tests/test_tasks.py`（重写：首次 claim 成功、已 ready 且无 force 时 `not_claimed`、force 重建、失败后置 `failed` 与重试）、`tests/test_task_idempotency.py`、`tests/test_schema_parity.py`。
+- 验证命令及结果：pytest 全绿；Docker 全栈 Worker 日志为 `Task ... received` → `succeeded ... 'stage': 'indexed'`；在真实 PostgreSQL 上并发调用 8 次 `claim_document()` 结果为 `claims_granted: 1 of 8`、最终 `status=processing`；CLI `reindex-document` 无 `--force` 返回 `already_indexed`，带 `--force` 返回 `indexed`。
+- 仍存在的限制：外部索引写入与 PostgreSQL 状态仍非事务性双写，worker 在“外部索引成功、状态更新前”崩溃会留下 `processing` 悬挂文档（需要 outbox/对账或超时回收，见 P1）；没有为 `processing` 设置超时回收任务。
+
+### 事项六：消除异步接口中的同步阻塞
+
+- 根因：三类同步调用出现在 `async def` 处理函数里——Redis 客户端、SQLAlchemy 同步 Session、同步文件写入——它们直接阻塞事件循环，单个慢查询会让同一 worker 上的所有请求排队。
+- 设计选择：缓存与限流接口整体异步化（`Cache.get/set`、`RateLimiter.check` 改为 `async def`，Redis 后端改用 `redis.asyncio`），中间件改为 `await limiter.check(...)`，`RetrievalService` 的缓存读写改为 await；存储调用统一经 `app/core/concurrency.py::run_blocking()`（`asyncio.to_thread`）在路由层下移，路由本身仍保持异步签名，`app/api/routes/evaluations.py` 等同步路由继续由 FastAPI 线程池承载。
+- 替代方案与取舍：没有把持久层重写为 `AsyncSession`/`asyncpg`——那会牵动 store、tasks、CLI、测试与 Alembic 迁移的调用面，风险与收益不匹配；`to_thread` 让阻塞点显式且有界，代价是每请求多一次线程调度，并且线程池默认上限（约 40）在高并发下仍是新的排队点。没有使用全局 `run_in_executor` 包装整个中间件：那会掩盖真正的阻塞来源。
+- 新增测试：`tests/test_async_non_blocking.py`（用 `httpx.ASGITransport` 在测试自身的循环里驱动应用，比较存储调用与事件循环的线程 ID，覆盖检索、上传、删除三个路由）、`tests/test_cache_rate_limit.py`（异步缓存/限流）、`tests/test_retrieval_service.py`（缓存替身改为异步）。
+- 验证命令及结果：pytest 全绿（含 3 个线程 ID 断言）；把 `run_blocking()` 临时改回直接调用后这 3 个测试立即失败（证明断言有效）；Docker 全链路冒烟通过。
+- 仍存在的限制：未做事件循环阻塞时长的量化压测；SQLAlchemy 同步引擎与线程池上限仍限制单进程并发。
+
+### 事项七：统一 Schema 演进
+
+- 根因：`app/core/store.py` 里有一份手写的 SQLite `ALTER TABLE`/建索引逻辑，启动时与 Alembic 迁移并行执行。两条路径都改同一张表，谁生效取决于运行顺序与方言，生产（PostgreSQL）与本地（SQLite）实际经历了不同的 schema 演进，模型文件成了第三个真相来源。
+- 设计选择：删除手写 102 行升级逻辑，schema 只由 Alembic 负责；新增 `alembic/versions/0007_document_updated_at.py` 让模型中的 `DocumentRecord.updated_at` 有对应迁移；新增 `tests/test_schema_parity.py`，在全新 SQLite 上分别用迁移与 `Base.metadata.create_all()` 建表，比对表集合与关键列，锁死“迁移 == 模型”。
+- 替代方案与取舍：没有保留手写路径并只做“幂等化”——双轨本身才是问题；也没有改用 `create_all()` 代替迁移，因为那放弃版本化与生产升级能力。代价是本地首次启动必须跑 `alembic upgrade head`（入口脚本已包含），任何模型变更都必须同时补迁移，否则 parity 测试失败。
+- 新增测试：`tests/test_schema_parity.py`。
+- 验证命令及结果：全新 SQLite 上 `alembic upgrade head` → `0007_document_updated_at (head)`，`documents` 表含 `updated_at`；parity 测试通过；pytest 全绿；Docker migrate 容器执行迁移后 API/Worker 正常。
+- 仍存在的限制：迁移仍是 forward-only，未补全 `downgrade`；`0001`–`0007` 只覆盖当前表结构，历史迁移未在 PostgreSQL 上逐一回归。
+
 ## P1：可靠性与安全
 
 - [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
@@ -91,20 +130,20 @@
   - 备选修复：把默认值改为 `None`（表示不过滤版本），或让 `latest` 解析为“每个文档的最大版本”。
   - 验收：上传 `v9` 文档后，默认查询能命中该文档；新增覆盖多版本语料的测试。
 
-- [ ] 上传改为分块流式写入，在读取过程中执行大小限制。
+- [x] 上传改为分块流式写入，在读取过程中执行大小限制。（2026-09-27 完成）
 - [ ] 校验文件 magic/MIME，并为 PDF/DOCX 解析设置超时、内存限制和任务 time limit。
 - [ ] 建立租户存储配额与原始文件清理/归档策略。
-- [ ] Celery 使用原子状态迁移或分布式锁，防止两个 Worker 同时处理同一文档。
+- [x] Celery 使用原子状态迁移或分布式锁，防止两个 Worker 同时处理同一文档。（2026-09-27 完成）
 - [ ] 为外部索引写入设计 generation/outbox/可重放机制，处理 PostgreSQL 与检索后端双写一致性。
 - [ ] API Key 支持哈希存储、轮换、吊销和审计。
 
 ## P1：性能与数据模型
 
 - [ ] 消除“整库 Chunk 加载 + Python 全量扫描”的查询路径。
-- [ ] async 路由改用 AsyncSession、`redis.asyncio`，避免同步 I/O 阻塞事件循环。
+- [x] async 路由改用 AsyncSession、`redis.asyncio`，避免同步 I/O 阻塞事件循环。（2026-09-27 完成缓存/限流与存储调用部分；AsyncSession 未做）
 - [ ] 状态字段增加 Enum/CheckConstraint，评测参数和结果在 PostgreSQL 使用 JSONB。
 - [ ] 补齐外键、级联删除和数据库级跨租户一致性约束。
-- [ ] 统一 Alembic Schema 演进，减少 SQLite 手写升级逻辑。
+- [x] 统一 Alembic Schema 演进，减少 SQLite 手写升级逻辑。（2026-09-27 完成）
 - [ ] 补齐所有 migration downgrade 或明确采用 forward-only 策略。
 
 ## P1：评测、可观测性与 CI
