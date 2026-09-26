@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from types import SimpleNamespace
 
 import httpx
@@ -260,3 +261,24 @@ def test_chat_stream_aclose_closes_upstream_without_trace_or_done(monkeypatch) -
     rag = next(record for record in records if record.name == "rag.request")
     assert generation.error == "stream cancelled"
     assert rag.error == "stream cancelled"
+
+
+def test_chat_stream_logs_the_provider_failure_for_operators(monkeypatch, caplog) -> None:
+    async def exercise():
+        response, _records, _contexts = await _make_response(
+            monkeypatch,
+            _FailingStreamingLLM(httpx.ReadError("secret socket detail")),
+        )
+        return [chunk async for chunk in response.body_iterator]
+
+    with caplog.at_level(logging.WARNING):
+        chunks = asyncio.run(exercise())
+
+    stream = "".join(chunks)
+    # The client keeps getting a generic message ...
+    assert "event: error" in stream
+    assert "secret socket detail" not in stream
+    # ... but the server must leave a diagnostic trail for the operator.
+    failures = [record for record in caplog.records if record.name == "app.api.routes.chat"]
+    assert [record.getMessage() for record in failures], "no log record for the failure"
+    assert any(record.exc_info for record in failures), "exception not attached to the log"

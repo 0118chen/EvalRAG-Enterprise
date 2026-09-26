@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -7,8 +8,11 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import authenticate, get_container, get_llm, resolve_tenant_id
 from app.core.concurrency import run_blocking
+from app.core.observability import tenant_hash
 from app.core.rag import stream_with_evidence
 from app.schemas import Answer, Citation, RetrievalDiagnostics, SearchRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["retrieval"])
 
@@ -194,7 +198,15 @@ async def chat_stream(
                         generation_span.set_error("stream cancelled")
                         rag_span.set_error("stream cancelled")
                         raise
-                    except Exception:  # noqa: BLE001 - provider adapters may raise any error
+                    except Exception:
+                        # The client only receives a generic message, so the real
+                        # cause has to reach the operator some other way.
+                        logger.warning(
+                            "generation failed tenant=%s request_id=%s",
+                            tenant_hash(payload.tenant_id),
+                            request.state.request_id,
+                            exc_info=True,
+                        )
                         generation_span.set_error("generation failed")
                         rag_span.set_error("generation failed")
                         generation_failed = True
