@@ -1,136 +1,584 @@
-"""Small SQLite persistence layer used by the local MVP.
+"""Database persistence shared by local development and production deployments."""
 
-The interface is deliberately narrow so it can later be replaced by PostgreSQL
-without changing the API or retrieval code.
-"""
-
-import sqlite3
 import json
+from datetime import UTC, datetime
 from pathlib import Path
-from threading import Lock
+
+from sqlalchemy import create_engine, delete, event, select, update
+from sqlalchemy.orm import Session
 
 from app.core.ingestion import Chunk
-from app.schemas import Document, KnowledgeBase
+from app.db.models import (
+    Base,
+    ChunkRecord,
+    DocumentRecord,
+    EvaluationDatasetRecord,
+    EvaluationExampleRecord,
+    EvaluationRecord,
+    FeedbackRecord,
+    KnowledgeBaseRecord,
+)
+from app.schemas import (
+    Document,
+    EvaluationDataset,
+    EvaluationExample,
+    KnowledgeBase,
+)
 
 
-class SQLiteStore:
-    def __init__(self, path: str = "data/evalrag.db") -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = Lock()
-        with self._connect() as connection:
-            connection.executescript("""
-            CREATE TABLE IF NOT EXISTS knowledge_bases (
-                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS documents (
-                id TEXT PRIMARY KEY, filename TEXT NOT NULL, knowledge_base_id TEXT NOT NULL,
-                chunks INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'ready', progress INTEGER NOT NULL DEFAULT 100,
-                error_message TEXT, FOREIGN KEY(knowledge_base_id) REFERENCES knowledge_bases(id)
-            );
-            CREATE TABLE IF NOT EXISTS chunks (
-                id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page INTEGER NOT NULL,
-                text TEXT NOT NULL, knowledge_base_id TEXT NOT NULL
-            );
-            """)
-            columns = {row[1] for row in connection.execute("PRAGMA table_info(documents)")}
-            if "status" not in columns:
-                connection.execute("ALTER TABLE documents ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'")
-            if "progress" not in columns:
-                connection.execute("ALTER TABLE documents ADD COLUMN progress INTEGER NOT NULL DEFAULT 100")
-            if "error_message" not in columns:
-                connection.execute("ALTER TABLE documents ADD COLUMN error_message TEXT")
-            connection.execute("CREATE TABLE IF NOT EXISTS evaluations (id TEXT PRIMARY KEY, dataset_name TEXT NOT NULL, retrieval_mode TEXT NOT NULL, top_k INTEGER NOT NULL, status TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
-            evaluation_columns = {row[1] for row in connection.execute("PRAGMA table_info(evaluations)")}
-            if "results_json" not in evaluation_columns:
-                connection.execute("ALTER TABLE evaluations ADD COLUMN results_json TEXT")
-            if "error_message" not in evaluation_columns:
-                connection.execute("ALTER TABLE evaluations ADD COLUMN error_message TEXT")
-            connection.execute("CREATE TABLE IF NOT EXISTS feedback (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, feedback TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '', rag_version TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+def normalize_database_url(database_url: str) -> str:
+    """Use the installed psycopg driver for PostgreSQL URLs."""
+    if database_url.startswith("postgres://"):
+        return "postgresql+psycopg://" + database_url.removeprefix("postgres://")
+    if database_url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + database_url.removeprefix("postgresql://")
+    if database_url.startswith("postgresql+asyncpg://"):
+        return "postgresql+psycopg://" + database_url.removeprefix("postgresql+asyncpg://")
+    return database_url
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
-        connection.row_factory = sqlite3.Row
-        return connection
 
-    def save_knowledge_base(self, kb: KnowledgeBase) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute("INSERT INTO knowledge_bases VALUES (?, ?, ?, ?)", (kb.id, kb.tenant_id, kb.name, kb.description))
+class SQLAlchemyStore:
+    """Synchronous SQLAlchemy store for SQLite and PostgreSQL."""
 
-    def get_knowledge_base(self, kb_id: str, tenant_id: str) -> KnowledgeBase | None:
-        with self._connect() as connection:
-            row = connection.execute("SELECT * FROM knowledge_bases WHERE id=? AND tenant_id=?", (kb_id, tenant_id)).fetchone()
-        return KnowledgeBase(**dict(row)) if row else None
+    def __init__(self, database_url: str) -> None:
+        self.database_url = normalize_database_url(database_url)
+        connect_args = {"check_same_thread": False} if self.database_url.startswith("sqlite") else {}
+        self.engine = create_engine(self.database_url, pool_pre_ping=True, connect_args=connect_args)
+        if self.database_url.startswith("sqlite"):
+            event.listen(self.engine, "connect", self._enable_sqlite_foreign_keys)
+            Base.metadata.create_all(self.engine)
+            self._upgrade_sqlite_schema()
+
+    @staticmethod
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    def _upgrade_sqlite_schema(self) -> None:
+        """Add columns introduced after the original local MVP database."""
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_bases_tenant_id "
+                "ON knowledge_bases (tenant_id)"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_documents_knowledge_base_id "
+                "ON documents (knowledge_base_id)"
+            )
+            for table in ("knowledge_bases", "documents", "evaluations", "feedback"):
+                columns = {
+                    row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
+                }
+                if columns and "created_at" not in columns:
+                    connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN created_at DATETIME")
+                if columns:
+                    connection.exec_driver_sql(
+                        f"UPDATE {table} SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL"
+                    )
+            document_columns = {
+                row[1] for row in connection.exec_driver_sql("PRAGMA table_info(documents)")
+            }
+            if document_columns and "version" not in document_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE documents ADD COLUMN version VARCHAR(64) DEFAULT 'latest'"
+                )
+            chunk_columns = {
+                row[1] for row in connection.exec_driver_sql("PRAGMA table_info(chunks)")
+            }
+            if chunk_columns and "version" not in chunk_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE chunks ADD COLUMN version VARCHAR(64) DEFAULT 'latest'"
+                )
+            if chunk_columns:
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_chunks_version ON chunks (version)"
+                )
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_chunks_document_id "
+                    "ON chunks (document_id)"
+                )
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_chunks_knowledge_base_id "
+                    "ON chunks (knowledge_base_id)"
+                )
+            evaluation_columns = {
+                row[1] for row in connection.exec_driver_sql("PRAGMA table_info(evaluations)")
+            }
+            evaluation_additions = {
+                "tenant_id": "VARCHAR(128) DEFAULT 'demo-enterprise'",
+                "knowledge_base_id": "VARCHAR(36)",
+                "dataset_id": "VARCHAR(36)",
+                "experiment_name": "VARCHAR(200)",
+                "baseline_evaluation_id": "VARCHAR(36)",
+                "parameters_json": "TEXT",
+                "completed_at": "DATETIME",
+            }
+            for column, declaration in evaluation_additions.items():
+                if evaluation_columns and column not in evaluation_columns:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE evaluations ADD COLUMN {column} {declaration}"
+                    )
+            if evaluation_columns:
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_evaluations_tenant_id "
+                    "ON evaluations (tenant_id)"
+                )
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_evaluations_knowledge_base_id "
+                    "ON evaluations (knowledge_base_id)"
+                )
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_evaluations_dataset_id "
+                    "ON evaluations (dataset_id)"
+                )
+            feedback_columns = {
+                row[1] for row in connection.exec_driver_sql("PRAGMA table_info(feedback)")
+            }
+            if feedback_columns and "tenant_id" not in feedback_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE feedback ADD COLUMN tenant_id VARCHAR(128) "
+                    "DEFAULT 'demo-enterprise'"
+                )
+            if feedback_columns:
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_feedback_tenant_id "
+                    "ON feedback (tenant_id)"
+                )
+            example_columns = {
+                row[1]
+                for row in connection.exec_driver_sql(
+                    "PRAGMA table_info(evaluation_examples)"
+                )
+            }
+            if example_columns and "expected_answer" not in example_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE evaluation_examples "
+                    "ADD COLUMN expected_answer TEXT"
+                )
+
+    def save_knowledge_base(self, knowledge_base: KnowledgeBase) -> None:
+        with Session(self.engine) as session:
+            session.add(KnowledgeBaseRecord(**knowledge_base.model_dump()))
+            session.commit()
+
+    def get_knowledge_base(self, knowledge_base_id: str, tenant_id: str) -> KnowledgeBase | None:
+        with Session(self.engine) as session:
+            record = session.scalar(
+                select(KnowledgeBaseRecord).where(
+                    KnowledgeBaseRecord.id == knowledge_base_id,
+                    KnowledgeBaseRecord.tenant_id == tenant_id,
+                )
+            )
+            return self._knowledge_base(record) if record else None
 
     def list_knowledge_bases(self, tenant_id: str) -> list[KnowledgeBase]:
-        with self._connect() as connection:
-            rows = connection.execute("SELECT * FROM knowledge_bases WHERE tenant_id=? ORDER BY rowid DESC", (tenant_id,)).fetchall()
-        return [KnowledgeBase(**dict(row)) for row in rows]
+        with Session(self.engine) as session:
+            records = session.scalars(
+                select(KnowledgeBaseRecord)
+                .where(KnowledgeBaseRecord.tenant_id == tenant_id)
+                .order_by(KnowledgeBaseRecord.created_at.desc(), KnowledgeBaseRecord.id.desc())
+            ).all()
+            return [self._knowledge_base(record) for record in records]
 
     def save_document(self, document: Document, chunks: list[Chunk]) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?)", (document.id, document.filename, document.knowledge_base_id, document.chunks, document.status, document.progress, document.error_message))
-            connection.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, document.knowledge_base_id) for c in chunks])
+        with Session(self.engine) as session:
+            session.add(
+                DocumentRecord(
+                    id=document.id,
+                    filename=document.filename,
+                    knowledge_base_id=document.knowledge_base_id,
+                    chunks=document.chunks,
+                    status=document.status,
+                    progress=document.progress,
+                    error_message=document.error_message,
+                    version=document.version,
+                )
+            )
+            session.flush()
+            session.add_all(self._chunk_records(document.knowledge_base_id, chunks))
+            session.commit()
 
     def update_document_status(self, document_id: str, status: str) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute("UPDATE documents SET status=? WHERE id=?", (status, document_id))
+        with Session(self.engine) as session:
+            session.execute(update(DocumentRecord).where(DocumentRecord.id == document_id).values(status=status))
+            session.commit()
 
     def update_document_progress(self, document_id: str, progress: int, error_message: str | None = None) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute("UPDATE documents SET progress=?, error_message=? WHERE id=?", (progress, error_message, document_id))
+        with Session(self.engine) as session:
+            session.execute(
+                update(DocumentRecord)
+                .where(DocumentRecord.id == document_id)
+                .values(progress=progress, error_message=error_message)
+            )
+            session.commit()
+
+    def replace_chunks(self, document_id: str, knowledge_base_id: str, chunks: list[Chunk]) -> None:
+        """Atomically replace a document index and keep its chunk count accurate."""
+        with Session(self.engine) as session:
+            session.execute(delete(ChunkRecord).where(ChunkRecord.document_id == document_id))
+            session.add_all(self._chunk_records(knowledge_base_id, chunks))
+            session.execute(
+                update(DocumentRecord)
+                .where(DocumentRecord.id == document_id)
+                .values(chunks=len(chunks))
+            )
+            session.commit()
 
     def delete_document(self, document_id: str, tenant_id: str) -> bool:
-        with self._lock, self._connect() as connection:
-            row = connection.execute("""SELECT d.id FROM documents d JOIN knowledge_bases k ON k.id=d.knowledge_base_id
-                                        WHERE d.id=? AND k.tenant_id=?""", (document_id, tenant_id)).fetchone()
-            if not row:
+        with Session(self.engine) as session:
+            record = session.scalar(
+                select(DocumentRecord)
+                .join(KnowledgeBaseRecord, KnowledgeBaseRecord.id == DocumentRecord.knowledge_base_id)
+                .where(DocumentRecord.id == document_id, KnowledgeBaseRecord.tenant_id == tenant_id)
+            )
+            if not record:
                 return False
-            connection.execute("DELETE FROM chunks WHERE document_id=?", (document_id,))
-            connection.execute("DELETE FROM documents WHERE id=?", (document_id,))
+            session.execute(delete(ChunkRecord).where(ChunkRecord.document_id == document_id))
+            session.delete(record)
+            session.commit()
             return True
 
-    def get_chunks(self, kb_id: str) -> list[Chunk]:
-        with self._connect() as connection:
-            rows = connection.execute("SELECT id, document_id, page, text FROM chunks WHERE knowledge_base_id=?", (kb_id,)).fetchall()
-        return [Chunk(**dict(row)) for row in rows]
+    def get_chunks(
+        self,
+        knowledge_base_id: str,
+        document_version: str | None = None,
+    ) -> list[Chunk]:
+        with Session(self.engine) as session:
+            statement = select(ChunkRecord).where(
+                ChunkRecord.knowledge_base_id == knowledge_base_id
+            )
+            if document_version:
+                statement = statement.where(ChunkRecord.version == document_version)
+            records = session.scalars(statement.order_by(ChunkRecord.id)).all()
+            return [
+                Chunk(
+                    id=record.id,
+                    document_id=record.document_id,
+                    page=record.page,
+                    text=record.text,
+                    version=record.version,
+                )
+                for record in records
+            ]
 
     def get_document(self, document_id: str, tenant_id: str) -> Document | None:
-        with self._connect() as connection:
-            row = connection.execute("""SELECT d.* FROM documents d JOIN knowledge_bases k ON k.id=d.knowledge_base_id
-                                        WHERE d.id=? AND k.tenant_id=?""", (document_id, tenant_id)).fetchone()
-        return Document(**dict(row)) if row else None
+        with Session(self.engine) as session:
+            record = session.scalar(
+                select(DocumentRecord)
+                .join(KnowledgeBaseRecord, KnowledgeBaseRecord.id == DocumentRecord.knowledge_base_id)
+                .where(DocumentRecord.id == document_id, KnowledgeBaseRecord.tenant_id == tenant_id)
+            )
+            return self._document(record) if record else None
 
     def get_document_any(self, document_id: str) -> Document | None:
-        with self._connect() as connection:
-            row = connection.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
-        return Document(**dict(row)) if row else None
+        with Session(self.engine) as session:
+            record = session.get(DocumentRecord, document_id)
+            return self._document(record) if record else None
 
     def list_documents(self, knowledge_base_id: str, tenant_id: str) -> list[Document]:
-        with self._connect() as connection:
-            rows = connection.execute("""SELECT d.* FROM documents d JOIN knowledge_bases k ON k.id=d.knowledge_base_id
-                                        WHERE d.knowledge_base_id=? AND k.tenant_id=? ORDER BY d.rowid DESC""", (knowledge_base_id, tenant_id)).fetchall()
-        return [Document(**dict(row)) for row in rows]
+        with Session(self.engine) as session:
+            records = session.scalars(
+                select(DocumentRecord)
+                .join(KnowledgeBaseRecord, KnowledgeBaseRecord.id == DocumentRecord.knowledge_base_id)
+                .where(
+                    DocumentRecord.knowledge_base_id == knowledge_base_id,
+                    KnowledgeBaseRecord.tenant_id == tenant_id,
+                )
+                .order_by(DocumentRecord.created_at.desc(), DocumentRecord.id.desc())
+            ).all()
+            return [self._document(record) for record in records]
 
-    def create_evaluation(self, evaluation_id: str, dataset_name: str, retrieval_mode: str, top_k: int) -> None:
-        """Persist an evaluation request before a worker executes it."""
-        with self._lock, self._connect() as connection:
-            connection.execute("INSERT INTO evaluations (id, dataset_name, retrieval_mode, top_k, status) VALUES (?, ?, ?, ?, 'queued')", (evaluation_id, dataset_name, retrieval_mode, top_k))
+    def save_evaluation_dataset(self, dataset: EvaluationDataset) -> None:
+        with Session(self.engine) as session:
+            session.add(
+                EvaluationDatasetRecord(
+                    id=dataset.id,
+                    tenant_id=dataset.tenant_id,
+                    knowledge_base_id=dataset.knowledge_base_id,
+                    name=dataset.name,
+                    description=dataset.description,
+                    created_at=dataset.created_at or datetime.now(UTC).replace(tzinfo=None),
+                )
+            )
+            session.add_all(
+                [
+                    EvaluationExampleRecord(
+                        id=example.id,
+                        dataset_id=dataset.id,
+                        question=example.question,
+                        expected_answer=example.expected_answer,
+                        expected_document_id=example.expected_document_id,
+                        expected_page=example.expected_page,
+                        category=example.category,
+                    )
+                    for example in dataset.examples
+                ]
+            )
+            session.commit()
+
+    def get_evaluation_dataset(
+        self,
+        dataset_id: str,
+        tenant_id: str | None = None,
+    ) -> EvaluationDataset | None:
+        with Session(self.engine) as session:
+            statement = select(EvaluationDatasetRecord).where(
+                EvaluationDatasetRecord.id == dataset_id
+            )
+            if tenant_id:
+                statement = statement.where(EvaluationDatasetRecord.tenant_id == tenant_id)
+            record = session.scalar(statement)
+            if not record:
+                return None
+            examples = session.scalars(
+                select(EvaluationExampleRecord)
+                .where(EvaluationExampleRecord.dataset_id == dataset_id)
+                .order_by(EvaluationExampleRecord.id)
+            ).all()
+            return self._evaluation_dataset(record, examples)
+
+    def get_evaluation_dataset_by_name(
+        self,
+        name: str,
+        tenant_id: str,
+    ) -> EvaluationDataset | None:
+        with Session(self.engine) as session:
+            record = session.scalar(
+                select(EvaluationDatasetRecord).where(
+                    EvaluationDatasetRecord.name == name,
+                    EvaluationDatasetRecord.tenant_id == tenant_id,
+                )
+            )
+            if not record:
+                return None
+            examples = session.scalars(
+                select(EvaluationExampleRecord)
+                .where(EvaluationExampleRecord.dataset_id == record.id)
+                .order_by(EvaluationExampleRecord.id)
+            ).all()
+            return self._evaluation_dataset(record, examples)
+
+    def list_evaluation_datasets(self, tenant_id: str) -> list[EvaluationDataset]:
+        with Session(self.engine) as session:
+            records = session.scalars(
+                select(EvaluationDatasetRecord)
+                .where(EvaluationDatasetRecord.tenant_id == tenant_id)
+                .order_by(
+                    EvaluationDatasetRecord.created_at.desc(),
+                    EvaluationDatasetRecord.id.desc(),
+                )
+            ).all()
+            datasets: list[EvaluationDataset] = []
+            for record in records:
+                examples = session.scalars(
+                    select(EvaluationExampleRecord)
+                    .where(EvaluationExampleRecord.dataset_id == record.id)
+                    .order_by(EvaluationExampleRecord.id)
+                ).all()
+                datasets.append(self._evaluation_dataset(record, examples))
+            return datasets
+
+    def create_evaluation(
+        self,
+        evaluation_id: str,
+        dataset_name: str,
+        retrieval_mode: str,
+        top_k: int,
+        *,
+        tenant_id: str = "demo-enterprise",
+        knowledge_base_id: str | None = None,
+        dataset_id: str | None = None,
+        experiment_name: str | None = None,
+        baseline_evaluation_id: str | None = None,
+        parameters: dict | None = None,
+    ) -> None:
+        with Session(self.engine) as session:
+            session.add(
+                EvaluationRecord(
+                    id=evaluation_id,
+                    tenant_id=tenant_id,
+                    knowledge_base_id=knowledge_base_id,
+                    dataset_id=dataset_id,
+                    dataset_name=dataset_name,
+                    retrieval_mode=retrieval_mode,
+                    top_k=top_k,
+                    experiment_name=experiment_name,
+                    baseline_evaluation_id=baseline_evaluation_id,
+                    parameters_json=json.dumps(parameters or {}, ensure_ascii=False),
+                    status="queued",
+                )
+            )
+            session.commit()
+
+    def list_evaluations(
+        self,
+        tenant_id: str,
+        *,
+        dataset_name: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        with Session(self.engine) as session:
+            statement = select(EvaluationRecord).where(
+                EvaluationRecord.tenant_id == tenant_id
+            )
+            if dataset_name:
+                statement = statement.where(EvaluationRecord.dataset_name == dataset_name)
+            if status:
+                statement = statement.where(EvaluationRecord.status == status)
+            records = session.scalars(
+                statement.order_by(
+                    EvaluationRecord.created_at.desc(),
+                    EvaluationRecord.id.desc(),
+                ).limit(limit)
+            ).all()
+            return [self._evaluation(record) for record in records]
 
     def get_evaluation(self, evaluation_id: str) -> dict | None:
-        with self._connect() as connection:
-            row = connection.execute("SELECT * FROM evaluations WHERE id=?", (evaluation_id,)).fetchone()
-        if not row:
-            return None
-        result = dict(row)
-        result["results"] = json.loads(result.pop("results_json")) if result.get("results_json") else None
-        return result
+        with Session(self.engine) as session:
+            record = session.get(EvaluationRecord, evaluation_id)
+            return self._evaluation(record) if record else None
 
-    def update_evaluation(self, evaluation_id: str, status: str, results: dict | None = None, error_message: str | None = None) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute("UPDATE evaluations SET status=?, results_json=?, error_message=? WHERE id=?", (status, json.dumps(results, ensure_ascii=False) if results is not None else None, error_message, evaluation_id))
+    def update_evaluation(
+        self,
+        evaluation_id: str,
+        status: str,
+        results: dict | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        with Session(self.engine) as session:
+            session.execute(
+                update(EvaluationRecord)
+                .where(EvaluationRecord.id == evaluation_id)
+                .values(
+                    status=status,
+                    results_json=json.dumps(results, ensure_ascii=False) if results is not None else None,
+                    error_message=error_message,
+                    completed_at=(
+                        datetime.now(UTC).replace(tzinfo=None)
+                        if status in {"completed", "failed"}
+                        else None
+                    ),
+                )
+            )
+            session.commit()
 
-    def save_feedback(self, feedback_id: str, trace_id: str, feedback: str, comment: str, rag_version: str, prompt_version: str) -> None:
-        """Store user feedback as a durable signal for evaluation dataset curation."""
-        with self._lock, self._connect() as connection:
-            connection.execute("INSERT INTO feedback (id, trace_id, feedback, comment, rag_version, prompt_version) VALUES (?, ?, ?, ?, ?, ?)", (feedback_id, trace_id, feedback, comment, rag_version, prompt_version))
+    def save_feedback(
+        self,
+        feedback_id: str,
+        trace_id: str,
+        feedback: str,
+        comment: str,
+        rag_version: str,
+        prompt_version: str,
+        tenant_id: str = "demo-enterprise",
+    ) -> None:
+        with Session(self.engine) as session:
+            session.add(
+                FeedbackRecord(
+                    id=feedback_id,
+                    tenant_id=tenant_id,
+                    trace_id=trace_id,
+                    feedback=feedback,
+                    comment=comment,
+                    rag_version=rag_version,
+                    prompt_version=prompt_version,
+                )
+            )
+            session.commit()
+
+    @staticmethod
+    def _knowledge_base(record: KnowledgeBaseRecord) -> KnowledgeBase:
+        return KnowledgeBase(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            name=record.name,
+            description=record.description,
+        )
+
+    @staticmethod
+    def _document(record: DocumentRecord) -> Document:
+        return Document(
+            id=record.id,
+            filename=record.filename,
+            knowledge_base_id=record.knowledge_base_id,
+            chunks=record.chunks,
+            status=record.status,
+            progress=record.progress,
+            error_message=record.error_message,
+            version=record.version,
+        )
+
+    @staticmethod
+    def _evaluation(record: EvaluationRecord) -> dict:
+        return {
+            "id": record.id,
+            "tenant_id": record.tenant_id,
+            "knowledge_base_id": record.knowledge_base_id,
+            "dataset_id": record.dataset_id,
+            "dataset_name": record.dataset_name,
+            "retrieval_mode": record.retrieval_mode,
+            "top_k": record.top_k,
+            "experiment_name": record.experiment_name,
+            "baseline_evaluation_id": record.baseline_evaluation_id,
+            "parameters": json.loads(record.parameters_json) if record.parameters_json else {},
+            "status": record.status,
+            "results": json.loads(record.results_json) if record.results_json else None,
+            "error_message": record.error_message,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+        }
+
+    @staticmethod
+    def _evaluation_dataset(
+        record: EvaluationDatasetRecord,
+        examples: list[EvaluationExampleRecord],
+    ) -> EvaluationDataset:
+        return EvaluationDataset(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            knowledge_base_id=record.knowledge_base_id,
+            name=record.name,
+            description=record.description,
+            created_at=record.created_at,
+            examples=[
+                EvaluationExample(
+                    id=example.id,
+                    dataset_id=example.dataset_id,
+                    question=example.question,
+                    expected_answer=example.expected_answer,
+                    expected_document_id=example.expected_document_id,
+                    expected_page=example.expected_page,
+                    category=example.category,
+                )
+                for example in examples
+            ],
+        )
+
+    @staticmethod
+    def _chunk_records(knowledge_base_id: str, chunks: list[Chunk]) -> list[ChunkRecord]:
+        return [
+            ChunkRecord(
+                id=chunk.id,
+                document_id=chunk.document_id,
+                page=chunk.page,
+                text=chunk.text,
+                knowledge_base_id=knowledge_base_id,
+                version=chunk.version,
+            )
+            for chunk in chunks
+        ]
+
+
+class SQLiteStore(SQLAlchemyStore):
+    """Backward-compatible path-based constructor used by local tooling."""
+
+    def __init__(self, path: str = "data/evalrag.db") -> None:
+        database_path = Path(path).resolve()
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        super().__init__(f"sqlite:///{database_path.as_posix()}")
+
+
+def create_store(database_url: str) -> SQLAlchemyStore:
+    return SQLAlchemyStore(database_url)
