@@ -1,7 +1,6 @@
 """Minimal dependency-free Prometheus exposition for the API MVP."""
 
 from collections import Counter
-from time import perf_counter
 
 
 class Metrics:
