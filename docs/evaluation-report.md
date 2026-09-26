@@ -61,6 +61,8 @@ python -m scripts.profile_retrieval --database data/experiments/golden.db --tena
 - **指标口径**：`Recall@k`/`MRR`/`nDCG@k`/`precision@k` 为**文档级**（`app/core/evaluation.py`）；
   `page_hit` = top-5 里存在 (期望文档, 期望页码) 的 chunk；
   `quote_hit` = top-5 里存在包含证据引文的 chunk（本报告独有，用于补上文档级指标看不见的粒度损失）。
+- **可复核性**：结果 JSON 里每题一行（`per_example`：问题、类别、来源文件、recall@1/@5、page_hit、
+  quote_hit、延迟、命中 chunk 的文档/页码/分数），所以下表任何汇总数字都能回查到具体是哪几道题。
 
 **随机基线**（同样 top-5、从 316 chunk 里随机抽，按每题相关 chunk 数精确计算，非估计）：
 
@@ -178,8 +180,10 @@ BM25+重排在 Recall@1/3/5、MRR、nDCG@3/5、page_hit 上全为 1.000。
 
 - 未接真实 embedding 模型、未接真实 Milvus/ES，全部为本地后端；hybrid 的结论**只对 hash 向量成立**。
 - 文档级指标在 13 份文档、每份约 24 chunk 的规模下区分度有限；`quote_hit` 是本报告自加的补充指标。
-- 证据引文用严格子串匹配，chunk 为 800 字窗口——若引文正好被窗口切断会记成未命中（实测最多影响 1–2 题）。
-- 延迟为单机 Windows + SQLite + 缓存关闭下的串行测量，不是并发压测结果。
+- 证据引文用严格子串匹配，chunk 为 800 字窗口。已核对：BM25+重排剩下的 2 次漏检**不是**窗口切断造成的
+  ——引文（35 字、65 字）完整落在语料内单个 chunk 里，只是那个 chunk 没进 top-5，属真实排序失误。
+- 延迟为单机 Windows + SQLite + 缓存关闭下的串行测量，不是并发压测结果；
+  质量指标可复现（同一脚本重跑，六组配置的文档级/引文级指标逐位相同，仅延迟有毫秒级波动）。
 
 ## 7. 下一步
 
