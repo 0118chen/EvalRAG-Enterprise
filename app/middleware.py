@@ -55,7 +55,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         identity = container.settings.api_keys.get(api_key or "")
         if not identity:
             identity = request.client.host if request.client else "unknown"
-        decision = limiter.check(identity)
+        decision = await limiter.check(identity)
         if not decision.allowed:
             return JSONResponse(
                 {"detail": "rate limit exceeded"},

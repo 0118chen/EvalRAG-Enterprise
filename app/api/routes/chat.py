@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import authenticate, get_container, get_llm, resolve_tenant_id
+from app.core.concurrency import run_blocking
 from app.core.rag import stream_with_evidence
 from app.schemas import Answer, Citation, RetrievalDiagnostics, SearchRequest
 
@@ -18,13 +19,15 @@ async def _retrieve(
 ):
     container = get_container(request)
     tenant_id = resolve_tenant_id(request, payload.tenant_id)
-    knowledge_base = container.store.get_knowledge_base(
+    knowledge_base = await run_blocking(
+        container.store.get_knowledge_base,
         payload.knowledge_base_id,
         tenant_id,
     )
     if not knowledge_base:
         raise HTTPException(status_code=404, detail="knowledge base not found")
-    chunks = container.store.get_chunks(
+    chunks = await run_blocking(
+        container.store.get_chunks,
         knowledge_base.id,
         payload.document_version,
     )

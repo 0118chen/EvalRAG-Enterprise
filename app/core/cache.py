@@ -1,4 +1,8 @@
-"""Small cache abstraction with memory, Redis and no-op implementations."""
+"""Small cache abstraction with memory, Redis and no-op implementations.
+
+Every backend is asynchronous because the cache is read from async request
+handlers: a synchronous Redis client would block the event loop on each lookup.
+"""
 
 import json
 import logging
@@ -10,18 +14,28 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+try:  # keep the memory and null backends usable without the redis package
+    from redis.exceptions import RedisError
+except ImportError:  # pragma: no cover - redis is a declared dependency
+    RedisError = OSError
+
+# redis-py raises its own ConnectionError/TimeoutError subclasses, which are not the
+# builtin ones. Catching the library base class is what makes a Redis outage degrade
+# instead of surfacing as a 500.
+REDIS_FAILURES = (RedisError, OSError, RuntimeError, ValueError)
+
 
 class Cache(Protocol):
-    def get(self, key: str) -> Any | None: ...
+    async def get(self, key: str) -> Any | None: ...
 
-    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None: ...
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None: ...
 
 
 class NullCache:
-    def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> Any | None:
         return None
 
-    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         return None
 
 
@@ -31,7 +45,7 @@ class MemoryTTLCache:
     clock: Any = time.monotonic
     _items: dict[str, tuple[float, Any]] = field(default_factory=dict)
 
-    def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> Any | None:
         item = self._items.get(key)
         if not item:
             return None
@@ -41,7 +55,7 @@ class MemoryTTLCache:
             return None
         return value
 
-    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         ttl = self.ttl_seconds if ttl_seconds is None else ttl_seconds
         self._items[key] = (self.clock() + ttl, value)
 
@@ -53,28 +67,34 @@ class RedisTTLCache:
     ttl_seconds: int = 120
 
     def __post_init__(self) -> None:
-        import redis
+        import redis.asyncio as redis_asyncio
 
-        self.client = redis.Redis.from_url(self.url, decode_responses=True)
+        self.client = redis_asyncio.Redis.from_url(self.url, decode_responses=True)
 
-    def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> Any | None:
         try:
-            payload = self.client.get(f"{self.prefix}{key}")
-        except (ImportError, OSError, RuntimeError, ValueError) as exc:
-            logger.warning("Redis cache unavailable, using memory cache: %s", exc)
+            payload = await self.client.get(f"{self.prefix}{key}")
+        except REDIS_FAILURES as exc:
+            logger.warning("Redis cache unavailable, treating key as a miss: %s", exc)
             return None
-        return json.loads(payload) if payload else None
+        if not payload:
+            return None
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning("discarding malformed cache entry for %s", key)
+            return None
 
-    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         ttl = self.ttl_seconds if ttl_seconds is None else ttl_seconds
         try:
-            self.client.set(
+            await self.client.set(
                 f"{self.prefix}{key}",
                 json.dumps(value, ensure_ascii=False),
                 ex=ttl,
             )
-        except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError):
-            return
+        except REDIS_FAILURES as exc:
+            logger.warning("Redis cache unavailable, skipping cache write: %s", exc)
 
 
 def create_cache(settings: Settings) -> Cache:

@@ -1,4 +1,8 @@
-"""Fixed-window rate limiting with memory and Redis backends."""
+"""Fixed-window rate limiting with memory and Redis backends.
+
+Checks are asynchronous: the limiter runs inside the async middleware chain, so a
+synchronous Redis client would block the event loop on every request.
+"""
 
 import logging
 import time
@@ -8,6 +12,13 @@ from typing import Protocol
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
+
+try:  # keep the memory limiter usable without the redis package
+    from redis.exceptions import RedisError
+except ImportError:  # pragma: no cover - redis is a declared dependency
+    RedisError = OSError
+
+REDIS_FAILURES = (RedisError, OSError, RuntimeError, ValueError)
 
 
 @dataclass(frozen=True)
@@ -19,7 +30,7 @@ class RateLimitDecision:
 
 
 class RateLimiter(Protocol):
-    def check(self, key: str, now: float | None = None) -> RateLimitDecision: ...
+    async def check(self, key: str, now: float | None = None) -> RateLimitDecision: ...
 
 
 class MemoryRateLimiter:
@@ -29,7 +40,7 @@ class MemoryRateLimiter:
         self.clock = clock
         self._windows: dict[str, tuple[float, int]] = {}
 
-    def check(self, key: str, now: float | None = None) -> RateLimitDecision:
+    async def check(self, key: str, now: float | None = None) -> RateLimitDecision:
         current = self.clock() if now is None else now
         window_start, count = self._windows.get(key, (current, 0))
         if current - window_start >= self.window_seconds:
@@ -47,34 +58,37 @@ class MemoryRateLimiter:
 
 class RedisRateLimiter:
     def __init__(self, url: str, limit: int, window_seconds: int) -> None:
-        import redis
+        import redis.asyncio as redis_asyncio
 
         self.limit = limit
         self.window_seconds = window_seconds
-        self.client = redis.Redis.from_url(url, decode_responses=True)
+        self.client = redis_asyncio.Redis.from_url(url, decode_responses=True)
 
-    def check(self, key: str, now: float | None = None) -> RateLimitDecision:
+    async def check(self, key: str, now: float | None = None) -> RateLimitDecision:
         redis_key = f"evalrag:rate:{key}"
         try:
             pipeline = self.client.pipeline()
             pipeline.incr(redis_key)
             pipeline.expire(redis_key, self.window_seconds, nx=True)
             pipeline.ttl(redis_key)
-            count, _, ttl = pipeline.execute()
-            retry_after = max(1, int(ttl if ttl and ttl > 0 else self.window_seconds))
-            return RateLimitDecision(
-                allowed=int(count) <= self.limit,
-                limit=self.limit,
-                remaining=max(0, self.limit - int(count)),
-                retry_after=retry_after,
-            )
-        except (ConnectionError, OSError, RuntimeError, TimeoutError):
+            count, _, ttl = await pipeline.execute()
+        except REDIS_FAILURES as exc:
+            # Fail open: an unavailable limiter must not take the whole API down.
+            # The trade-off is that traffic is unthrottled for the outage window.
+            logger.warning("Redis rate limiter unavailable, allowing request: %s", exc)
             return RateLimitDecision(
                 allowed=True,
                 limit=self.limit,
                 remaining=self.limit,
                 retry_after=0,
             )
+        retry_after = max(1, int(ttl if ttl and ttl > 0 else self.window_seconds))
+        return RateLimitDecision(
+            allowed=int(count) <= self.limit,
+            limit=self.limit,
+            remaining=max(0, self.limit - int(count)),
+            retry_after=retry_after,
+        )
 
 
 def create_rate_limiter(settings: Settings) -> RateLimiter | None:

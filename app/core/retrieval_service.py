@@ -106,7 +106,7 @@ class RetrievalService:
                     "corpus_fingerprint": corpus_hash.hexdigest(),
                 },
             )
-            cached = self.cache.get(key)
+            cached = await self.cache.get(key)
             if cached:
                 by_id = {chunk.id: chunk for chunk in chunks}
                 results = [
@@ -181,7 +181,7 @@ class RetrievalService:
             clean_results = [
                 (chunk, score) for chunk, score in results if score > 0
             ]
-            self.cache.set(
+            await self.cache.set(
                 key,
                 {
                     "items": [

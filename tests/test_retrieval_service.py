@@ -130,10 +130,10 @@ def test_retrieval_cache_key_fingerprints_embedding_and_external_indexes(monkeyp
     captured_keys = []
 
     class CapturingCache:
-        def get(self, key):
+        async def get(self, key):
             captured_keys.append(key)
 
-        def set(self, key, value, ttl_seconds=None):
+        async def set(self, key, value, ttl_seconds=None):
             pass
 
     class FakeRetriever:
