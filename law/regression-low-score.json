@@ -1,0 +1,22 @@
+{
+  "tenant_id": "zhongxin-nonghe",
+  "name": "农村金融法规-低分题回归-20260923",
+  "description": "两道答案级低分题回归验证",
+  "examples": [
+    {
+      "expected_document_id": "7b3248be-0b98-4ed5-9594-03ad7a8f608b",
+      "expected_page": 1,
+      "category": "业务规范",
+      "question": "《关于加强小额贷款公司监督管理的通知》规定小额贷款公司贷款不得用于哪些事项？",
+      "expected_answer": "不得用于股票、金融衍生品等投资；房地产市场违规融资；法律法规、银保监会和地方金融监管部门禁止的其他用途。"
+    },
+    {
+      "expected_document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "expected_page": 1,
+      "category": "期限",
+      "question": "《中华人民共和国农村土地承包法》规定耕地的承包期是多久？",
+      "expected_answer": "耕地的承包期为三十年；耕地承包期届满后再延长三十年。"
+    }
+  ],
+  "knowledge_base_id": "d0b5e091-92e9-4f73-8f0a-37aea96c69cf"
+}

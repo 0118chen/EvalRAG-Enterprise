@@ -1,0 +1,29 @@
+{
+  "name": "农村金融法规-完整性回归-20260923",
+  "knowledge_base_id": "d0b5e091-92e9-4f73-8f0a-37aea96c69cf",
+  "examples": [
+    {
+      "category": "经营要求",
+      "expected_answer": "支小支农担保金额占全部担保金额的比例原则上不得低于80%，其中单户担保金额500万元及以下的占比原则上不得低于50%。",
+      "expected_document_id": "43777515-f9b8-4f8f-9926-b4b962b2d37d",
+      "question": "《政府性融资担保发展管理办法》规定支小支农担保金额占全部担保金额的比例原则上不得低于多少？",
+      "expected_page": 3
+    },
+    {
+      "category": "设立条件",
+      "expected_answer": "设立全国性商业银行的注册资本最低限额为十亿元人民币，且注册资本应当是实缴资本。",
+      "expected_document_id": "0dfdd53c-bd1e-4c3b-a839-33affe14ebeb",
+      "question": "《中华人民共和国商业银行法》规定，设立全国性商业银行的注册资本最低限额是多少？",
+      "expected_page": 1
+    },
+    {
+      "category": "期限",
+      "expected_answer": "耕地的承包期为三十年；耕地承包期届满后再延长三十年。",
+      "expected_document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "question": "《中华人民共和国农村土地承包法》规定耕地的承包期是多久？",
+      "expected_page": 1
+    }
+  ],
+  "tenant_id": "zhongxin-nonghe",
+  "description": "三道答案完整性回归题"
+}

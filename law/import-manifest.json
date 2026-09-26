@@ -1,0 +1,125 @@
+{
+  "tenant_id": "zhongxin-nonghe",
+  "knowledge_base_id": "d0b5e091-92e9-4f73-8f0a-37aea96c69cf",
+  "knowledge_base_name": "农村金融法规第一轮",
+  "imported_at": "2026-09-23T22:11:07.1461981+08:00",
+  "documents": [
+    {
+      "document_id": "50991a83-c058-44f3-a7cb-6879602d941c",
+      "filename": "13_基础法律_全国人大常委会_中华人民共和国农村集体经济组织法_2024.docx",
+      "status": "ready",
+      "chunks": 16,
+      "version": "latest",
+      "size_bytes": 27759,
+      "sha256": "03c2a9a411993e345b4ee228df57f9031242ac8d997b8e2618624c1df86788d1"
+    },
+    {
+      "document_id": "9b333db6-0c1a-4b02-a1ee-95560880e6b6",
+      "filename": "12_基础法律_全国人大常委会_中华人民共和国乡村振兴促进法_2021.docx",
+      "status": "ready",
+      "chunks": 16,
+      "version": "latest",
+      "size_bytes": 29539,
+      "sha256": "d800388967062de348974cb82bc215accd20ee8bcaa98c8a7886f0a8850ec075"
+    },
+    {
+      "document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "filename": "11_基础法律_全国人大常委会_中华人民共和国农村土地承包法_2018.docx",
+      "status": "ready",
+      "chunks": 11,
+      "version": "latest",
+      "size_bytes": 28217,
+      "sha256": "bb4f6f741d7246f1478b10bf0c6c5ee0d9c59523552eccdd38b8fc0ec84d261b"
+    },
+    {
+      "document_id": "0dfdd53c-bd1e-4c3b-a839-33affe14ebeb",
+      "filename": "10_基础法律_全国人大常委会_中华人民共和国商业银行法_2015.docx",
+      "status": "ready",
+      "chunks": 15,
+      "version": "latest",
+      "size_bytes": 27352,
+      "sha256": "4d7ea8f8fb5fee9bded24f868e4ef77733fa6d538bc1b232a8e943c0435862cb"
+    },
+    {
+      "document_id": "2dbc806b-7e51-452a-b62a-8e3a3107ab5a",
+      "filename": "09_基础法律_全国人大常委会_中华人民共和国民法典_2020.docx",
+      "status": "ready",
+      "chunks": 163,
+      "version": "latest",
+      "size_bytes": 197879,
+      "sha256": "6926a597a66c5aad4803591ce9a51a8eebe847260f5ba2805210b608ded78353"
+    },
+    {
+      "document_id": "90c52a35-329b-43d5-8da6-c227d73ce5af",
+      "filename": "08_历史参考_原银监会_关于小额贷款公司试点的指导意见_2008.pdf",
+      "status": "ready",
+      "chunks": 6,
+      "version": "latest",
+      "size_bytes": 1350876,
+      "sha256": "161708869d138189a714090bc77a63f95b1664b1825f38e154ffbaa44bb1bf00"
+    },
+    {
+      "document_id": "7b3248be-0b98-4ed5-9594-03ad7a8f608b",
+      "filename": "07_重要补充_原银保监会_关于加强小额贷款公司监督管理的通知_2020.pdf",
+      "status": "ready",
+      "chunks": 6,
+      "version": "latest",
+      "size_bytes": 182207,
+      "sha256": "33c5bab7fd571cdebda83bf0ecd2500d242aa61dcfa35b4fae472546cd2e8481"
+    },
+    {
+      "document_id": "9fe43a5c-7eb3-4d72-9196-9173b10601ce",
+      "filename": "06_现行核心_国家金融监督管理总局_小额贷款公司监督管理暂行办法_2025.pdf",
+      "status": "ready",
+      "chunks": 20,
+      "version": "latest",
+      "size_bytes": 427722,
+      "sha256": "05aa4047c1256337cacd0425d362072c96dc7d412de0d1c33fd7747accebbdd8"
+    },
+    {
+      "document_id": "34f0b0ad-3d68-4f41-8d09-2e04b3b101ff",
+      "filename": "05_现行核心_国家金融监督管理总局_固定资产贷款管理办法_2024.pdf",
+      "status": "ready",
+      "chunks": 15,
+      "version": "latest",
+      "size_bytes": 352845,
+      "sha256": "5664d79e2eb2345ec1405d83421d79ba3b557facacdea8827be94a79ecf1d954"
+    },
+    {
+      "document_id": "ca73edbd-e4e6-4d7f-8516-6118592ec36e",
+      "filename": "04_现行核心_国家金融监督管理总局_流动资金贷款管理办法_2024.pdf",
+      "status": "ready",
+      "chunks": 16,
+      "version": "latest",
+      "size_bytes": 412701,
+      "sha256": "5bedc571b748089eb2e17ac39cc543e812aa0a97776ef005addaa48815fe9669"
+    },
+    {
+      "document_id": "2920f587-3780-415a-9809-240dce1d7345",
+      "filename": "03_历史参考_原银监会_农户贷款管理办法_2012.pdf",
+      "status": "ready",
+      "chunks": 11,
+      "version": "latest",
+      "size_bytes": 345340,
+      "sha256": "a21e376b22dea301d1816bf82e34d22f5b4d97fcda5a275624edca1272c89605"
+    },
+    {
+      "document_id": "43777515-f9b8-4f8f-9926-b4b962b2d37d",
+      "filename": "02_重要补充_财政部_政府性融资担保发展管理办法_2025.pdf",
+      "status": "ready",
+      "chunks": 8,
+      "version": "latest",
+      "size_bytes": 232012,
+      "sha256": "18331557596d90fd632d0255ac7be8d8649b3e6726360b17a3cecedab5948ff4"
+    },
+    {
+      "document_id": "3ad98bb0-2aa9-469a-8b7a-d7ce5d5846a0",
+      "filename": "01_现行核心_国家金融监督管理总局_个人贷款管理办法_2024.pdf",
+      "status": "ready",
+      "chunks": 13,
+      "version": "latest",
+      "size_bytes": 325491,
+      "sha256": "45e80bc53688741c379dc6ba7a8679fff3208a8d4265b8d93be7dfa24d4f1397"
+    }
+  ]
+}

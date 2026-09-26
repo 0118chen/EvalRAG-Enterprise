@@ -1,0 +1,320 @@
+{
+  "description": "覆盖13份全国性农村金融法规的52条页级黄金题",
+  "knowledge_base_id": "d0b5e091-92e9-4f73-8f0a-37aea96c69cf",
+  "examples": [
+    {
+      "expected_page": 1,
+      "expected_document_id": "3ad98bb0-2aa9-469a-8b7a-d7ce5d5846a0",
+      "question": "《个人贷款管理办法》所称银行业金融机构（贷款人）是指哪些机构？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "3ad98bb0-2aa9-469a-8b7a-d7ce5d5846a0",
+      "question": "《个人贷款管理办法》对用于个人消费的贷款期限有何规定？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 4,
+      "expected_document_id": "3ad98bb0-2aa9-469a-8b7a-d7ce5d5846a0",
+      "question": "《个人贷款管理办法》规定，个人贷款资金原则上应采用哪种支付方式？",
+      "category": "流程"
+    },
+    {
+      "expected_page": 6,
+      "expected_document_id": "3ad98bb0-2aa9-469a-8b7a-d7ce5d5846a0",
+      "question": "《个人贷款管理办法》规定，贷款人违反本办法规定办理个人贷款业务的，国家金融监督管理总局及其派出机构应当采取什么措施？",
+      "category": "法律责任"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "43777515-f9b8-4f8f-9926-b4b962b2d37d",
+      "question": "《政府性融资担保发展管理办法》所称政府性融资担保机构是指什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 3,
+      "expected_document_id": "43777515-f9b8-4f8f-9926-b4b962b2d37d",
+      "question": "《政府性融资担保发展管理办法》规定支小支农担保金额占全部担保金额的比例原则上不得低于多少？",
+      "category": "经营要求"
+    },
+    {
+      "expected_page": 5,
+      "expected_document_id": "43777515-f9b8-4f8f-9926-b4b962b2d37d",
+      "question": "《政府性融资担保发展管理办法》规定政府性融资担保机构在代偿资产转让工作结束后多少个工作日内报告？",
+      "category": "流程"
+    },
+    {
+      "expected_page": 7,
+      "expected_document_id": "43777515-f9b8-4f8f-9926-b4b962b2d37d",
+      "question": "《政府性融资担保发展管理办法》对政府性融资担保机构实行什么管理制度？",
+      "category": "监督管理"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "2920f587-3780-415a-9809-240dce1d7345",
+      "question": "《农户贷款管理办法》所称农户贷款是指什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 3,
+      "expected_document_id": "2920f587-3780-415a-9809-240dce1d7345",
+      "question": "《农户贷款管理办法》规定农户贷款期限应当根据哪些因素合理确定？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 4,
+      "expected_document_id": "2920f587-3780-415a-9809-240dce1d7345",
+      "question": "《农户贷款管理办法》规定哪些情形的农户贷款经农村金融机构同意可以采取借款人自主支付？",
+      "category": "流程"
+    },
+    {
+      "expected_page": 5,
+      "expected_document_id": "2920f587-3780-415a-9809-240dce1d7345",
+      "question": "《农户贷款管理办法》规定农村金融机构对确实无法收回的农户贷款可以如何处理？",
+      "category": "监督管理"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "ca73edbd-e4e6-4d7f-8516-6118592ec36e",
+      "question": "《流动资金贷款管理办法》所称银行业金融机构（贷款人）包括哪些机构？",
+      "category": "适用对象"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "ca73edbd-e4e6-4d7f-8516-6118592ec36e",
+      "question": "《流动资金贷款管理办法》所称流动资金贷款的定义是什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "ca73edbd-e4e6-4d7f-8516-6118592ec36e",
+      "question": "《流动资金贷款管理办法》对流动资金贷款期限是如何规定的？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 6,
+      "expected_document_id": "ca73edbd-e4e6-4d7f-8516-6118592ec36e",
+      "question": "《流动资金贷款管理办法》规定，贷款人违反规定经营流动资金贷款业务，国家金融监督管理总局及其派出机构应当采取什么措施？",
+      "category": "法律责任"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "34f0b0ad-3d68-4f41-8d09-2e04b3b101ff",
+      "question": "《固定资产贷款管理办法》所称银行业金融机构（贷款人）是指哪些机构？",
+      "category": "适用对象"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "34f0b0ad-3d68-4f41-8d09-2e04b3b101ff",
+      "question": "《固定资产贷款管理办法》所称固定资产贷款的定义是什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "34f0b0ad-3d68-4f41-8d09-2e04b3b101ff",
+      "question": "《固定资产贷款管理办法》对固定资产贷款期限有何规定？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 4,
+      "expected_document_id": "34f0b0ad-3d68-4f41-8d09-2e04b3b101ff",
+      "question": "《固定资产贷款管理办法》规定，向借款人某一交易对象单笔支付金额超过多少时应采用贷款人受托支付方式？",
+      "category": "流程"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "9fe43a5c-7eb3-4d72-9196-9173b10601ce",
+      "question": "《小额贷款公司监督管理暂行办法》适用于哪些机构？",
+      "category": "适用范围"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "9fe43a5c-7eb3-4d72-9196-9173b10601ce",
+      "question": "《小额贷款公司监督管理暂行办法》所称小额贷款公司是什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "9fe43a5c-7eb3-4d72-9196-9173b10601ce",
+      "question": "《小额贷款公司监督管理暂行办法》规定小额贷款公司跨省、自治区、直辖市开展业务是否允许？",
+      "category": "业务经营"
+    },
+    {
+      "expected_page": 9,
+      "expected_document_id": "9fe43a5c-7eb3-4d72-9196-9173b10601ce",
+      "question": "《小额贷款公司监督管理暂行办法》规定省级地方金融管理机构对现场检查调查的覆盖要求是什么？",
+      "category": "监督管理"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "7b3248be-0b98-4ed5-9594-03ad7a8f608b",
+      "question": "《关于加强小额贷款公司监督管理的通知》规定小额贷款公司通过银行借款、股东借款等非标准化融资形式融入资金的余额不得超过其净资产的多少倍？",
+      "category": "期限与比例"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "7b3248be-0b98-4ed5-9594-03ad7a8f608b",
+      "question": "《关于加强小额贷款公司监督管理的通知》规定小额贷款公司对同一借款人的贷款余额不得超过小额贷款公司净资产的多少比例？",
+      "category": "定义与比例"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "7b3248be-0b98-4ed5-9594-03ad7a8f608b",
+      "question": "《关于加强小额贷款公司监督管理的通知》规定小额贷款公司贷款不得用于哪些事项？",
+      "category": "业务规范"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "7b3248be-0b98-4ed5-9594-03ad7a8f608b",
+      "question": "《关于加强小额贷款公司监督管理的通知》规定地方金融监管部门对小额贷款公司违法违规经营可以采取哪些监管措施？",
+      "category": "监督管理与法律责任"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "90c52a35-329b-43d5-8da6-c227d73ce5af",
+      "question": "《关于小额贷款公司试点的指导意见》规定小额贷款公司的性质是什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "90c52a35-329b-43d5-8da6-c227d73ce5af",
+      "question": "《关于小额贷款公司试点的指导意见》对小额贷款公司单一自然人、企业法人、其他社会组织及其关联方持股比例有何限制？",
+      "category": "设立条件"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "90c52a35-329b-43d5-8da6-c227d73ce5af",
+      "question": "《关于小额贷款公司试点的指导意见》规定小额贷款公司同一借款人的贷款余额上限是多少？",
+      "category": "资金运用"
+    },
+    {
+      "expected_page": 2,
+      "expected_document_id": "90c52a35-329b-43d5-8da6-c227d73ce5af",
+      "question": "《关于小额贷款公司试点的指导意见》规定小额贷款公司从事非法集资活动时由谁负责处置？",
+      "category": "法律责任"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "2dbc806b-7e51-452a-b62a-8e3a3107ab5a",
+      "question": "《中华人民共和国民法典》规定，向人民法院请求保护民事权利的诉讼时效期间一般为多久？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "2dbc806b-7e51-452a-b62a-8e3a3107ab5a",
+      "question": "《中华人民共和国民法典》规定，自然人的民事权利能力从何时起到何时止？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "2dbc806b-7e51-452a-b62a-8e3a3107ab5a",
+      "question": "《中华人民共和国民法典》规定，民法调整哪些主体之间的人身关系和财产关系？",
+      "category": "适用范围"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "2dbc806b-7e51-452a-b62a-8e3a3107ab5a",
+      "question": "《中华人民共和国民法典》规定，监护人不履行监护职责或者侵害被监护人合法权益的，应当承担什么责任？",
+      "category": "法律责任"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "0dfdd53c-bd1e-4c3b-a839-33affe14ebeb",
+      "question": "《中华人民共和国商业银行法》所称的商业银行是指什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "0dfdd53c-bd1e-4c3b-a839-33affe14ebeb",
+      "question": "《中华人民共和国商业银行法》规定，设立全国性商业银行的注册资本最低限额是多少？",
+      "category": "设立条件"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "0dfdd53c-bd1e-4c3b-a839-33affe14ebeb",
+      "question": "《中华人民共和国商业银行法》规定，国务院银行业监督管理机构对商业银行的接管期限最长不得超过多久？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "0dfdd53c-bd1e-4c3b-a839-33affe14ebeb",
+      "question": "《中华人民共和国商业银行法》规定，商业银行破产清算时，在支付清算费用、所欠职工工资和劳动保险费用后，应当优先支付什么？",
+      "category": "法律责任"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "question": "《中华人民共和国农村土地承包法》所称农村土地包括哪些？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "question": "《中华人民共和国农村土地承包法》规定耕地的承包期是多久？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "question": "《中华人民共和国农村土地承包法》规定土地承包应当按照哪些程序进行？",
+      "category": "流程"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "732af6ca-53a1-483b-b85e-3170acedb5d0",
+      "question": "《中华人民共和国农村土地承包法》规定国家机关及其工作人员有利用职权干涉农村土地承包经营等行为造成损失的，应承担什么责任？",
+      "category": "法律责任"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "9b333db6-0c1a-4b02-a1ee-95560880e6b6",
+      "question": "《中华人民共和国乡村振兴促进法》适用于哪些活动？",
+      "category": "适用范围"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "9b333db6-0c1a-4b02-a1ee-95560880e6b6",
+      "question": "《中华人民共和国乡村振兴促进法》所称乡村的定义是什么？",
+      "category": "定义"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "9b333db6-0c1a-4b02-a1ee-95560880e6b6",
+      "question": "《中华人民共和国乡村振兴促进法》规定每年农历秋分日是什么节日？",
+      "category": "期限"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "9b333db6-0c1a-4b02-a1ee-95560880e6b6",
+      "question": "《中华人民共和国乡村振兴促进法》规定县级以上各级人民政府应当向谁报告乡村振兴促进工作情况？",
+      "category": "监督管理"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "50991a83-c058-44f3-a7cb-6879602d941c",
+      "question": "《中华人民共和国农村集体经济组织法》自何时起施行？",
+      "category": "施行日期"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "50991a83-c058-44f3-a7cb-6879602d941c",
+      "question": "农村集体经济组织包括哪几级组织？",
+      "category": "适用范围"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "50991a83-c058-44f3-a7cb-6879602d941c",
+      "question": "农村集体经济组织成员大会采用什么表决方式？",
+      "category": "组织治理"
+    },
+    {
+      "expected_page": 1,
+      "expected_document_id": "50991a83-c058-44f3-a7cb-6879602d941c",
+      "question": "农村集体经济组织是否适用有关破产法律的规定？",
+      "category": "法律适用"
+    }
+  ],
+  "name": "农村金融法规-黄金集-v1-20260923",
+  "tenant_id": "zhongxin-nonghe"
+}
