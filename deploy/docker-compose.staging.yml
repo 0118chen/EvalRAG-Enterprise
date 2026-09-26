@@ -1,11 +1,12 @@
 services:
   frontend:
-    build: ./frontend
+    build: ../frontend
     ports:
-      - "${FRONTEND_PORT:-8080}:80"
+      - "8080:80"
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
@@ -13,12 +14,12 @@ services:
     environment:
       POSTGRES_DB: evalrag
       POSTGRES_USER: evalrag
-      POSTGRES_PASSWORD: evalrag
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U evalrag -d evalrag"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -29,13 +30,11 @@ services:
       - redis_data:/data
 
   migrate:
-    build: .
-    env_file: .env
+    build: ..
+    env_file: ../.env.staging
     environment:
-      DATABASE_URL: postgresql+psycopg://evalrag:evalrag@postgres:5432/evalrag
+      DATABASE_URL: postgresql+psycopg://evalrag:${POSTGRES_PASSWORD}@postgres:5432/evalrag
     command: alembic upgrade head
-    volumes:
-      - ./alembic:/app/alembic:ro
     healthcheck:
       disable: true
     depends_on:
@@ -44,18 +43,17 @@ services:
     restart: "no"
 
   api:
-    build: .
-    env_file: .env
+    build: ..
+    env_file: ../.env.staging
     environment:
+      APP_ENV: staging
+      DATABASE_URL: postgresql+psycopg://evalrag:${POSTGRES_PASSWORD}@postgres:5432/evalrag
       REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql+psycopg://evalrag:evalrag@postgres:5432/evalrag
-    ports:
-      - "${API_PORT:-8000}:8000"
+      CACHE_BACKEND: redis
+      RATE_LIMIT_BACKEND: redis
+    restart: unless-stopped
     volumes:
       - uploads_data:/app/data/uploads
-      - ./app:/app/app:ro
-      - ./alembic:/app/alembic:ro
-    restart: unless-stopped
     depends_on:
       redis:
         condition: service_started
@@ -63,11 +61,13 @@ services:
         condition: service_completed_successfully
 
   worker:
-    build: .
-    env_file: .env
+    build: ..
+    env_file: ../.env.staging
     environment:
+      APP_ENV: staging
+      DATABASE_URL: postgresql+psycopg://evalrag:${POSTGRES_PASSWORD}@postgres:5432/evalrag
       REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql+psycopg://evalrag:evalrag@postgres:5432/evalrag
+      CACHE_BACKEND: redis
     command: celery -A app.tasks.celery_app worker --loglevel=INFO --concurrency=2
     restart: unless-stopped
     healthcheck:
@@ -78,8 +78,6 @@ services:
       start_period: 20s
     volumes:
       - uploads_data:/app/data/uploads
-      - ./app:/app/app:ro
-      - ./alembic:/app/alembic:ro
     depends_on:
       redis:
         condition: service_started
@@ -87,6 +85,6 @@ services:
         condition: service_completed_successfully
 
 volumes:
-  redis_data:
   postgres_data:
+  redis_data:
   uploads_data:
