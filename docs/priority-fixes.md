@@ -5,10 +5,11 @@
 
 ## P0：公开仓库或简历演示前
 
-- [ ] **LangSmith Dataset 增加租户命名空间**
+- [x] **LangSmith Dataset 增加租户命名空间**（2026-09-27 完成）
   - 风险：不同租户使用相同 Dataset 名称时，远端样本可能混存。
   - 位置：`app/api/routes/evaluations.py`、`app/core/langsmith_eval.py`
   - 验收：两个租户创建同名 Dataset 后映射到不同远端名称；测试覆盖同步与实验查询。
+  - 结果：新增 `remote_dataset_name(tenant_id, name)`（`<name>--<tenant_hash[:12]>`），`create_dataset`、`ensure_dataset`、`run_experiment` 全部按租户解析远端名称；`tenant_hash` 后缀避免把原始租户标识写进远端系统。
 
 - [x] **修复 Redis 故障降级异常类型**（2026-09-27 完成）
   - 风险：Redis 断连时 Cache/Rate Limit 抛出未处理异常，API 返回 500。
@@ -16,25 +17,29 @@
   - 验收：捕获 `redis.exceptions.RedisError`；Redis 不可用时按既定策略降级；补充集成或故障注入测试。
   - 结果：两个后端改为捕获 `redis.exceptions.RedisError`（redis-py 的连接/超时异常是它的子类，此前捕获的内建 `ConnectionError`/`TimeoutError` 永远匹配不到）。缓存读失败按 miss 处理并打 warning；限流失败 fail-open 放行并打 warning；新增 `REDIS_FAILURES` 常量集中声明。
 
-- [ ] **保护真实 LLM/LangSmith 健康检查**
+- [x] **保护真实 LLM/LangSmith 健康检查**（2026-09-27 完成）
   - 风险：公开 `/health/llm` 可被匿名重复调用并产生模型费用，且绕过 `/api/` 限流。
   - 位置：`app/api/routes/health.py`、`app/middleware.py`、`deploy/nginx/https.conf`
   - 验收：live/ready 保持廉价；外部连通检查需要认证、内网访问或独立管理端点，并有测试。
+  - 结果：`require_health_admin` 依赖——本地环境（`APP_ENV=development/local/test`）或显式 `HEALTH_CHECKS_PUBLIC=true` 时放行；否则要求 `X-Health-Token` 与 `HEALTH_ADMIN_TOKEN` 常量时间比较，未配置令牌时返回 503 而不是放行。限流中间件由「只限 `/api/`」改为「豁免廉价路径清单」，因此这两个端点现在也计入限流。
 
-- [ ] **校验 Baseline Evaluation 租户归属**
+- [x] **校验 Baseline Evaluation 租户归属**（2026-09-27 完成）
   - 风险：异步 Runner 可按其他租户的 Evaluation ID 计算差值，泄露聚合指标并污染结果。
   - 位置：`app/api/routes/evaluations.py`、`app/core/evaluation_runner.py`
   - 验收：创建任务及 Runner 执行时均验证当前评测与基线属于同一租户。
+  - 结果：创建接口对跨租户基线返回与其他不存在情况相同的 404；Runner 的 `_baseline_diff` 在租户不匹配时跳过并打 warning。
 
-- [ ] **Staging 默认启用认证或仅绑定本机地址**
+- [x] **Staging 默认启用认证或仅绑定本机地址**（2026-09-27 完成）
   - 风险：认证关闭时服务端直接信任请求中的 `tenant_id`。
   - 位置：`.env.staging.example`、`deploy/docker-compose.staging.yml`
   - 验收：示例配置默认不暴露无认证多租户 API。
+  - 结果：staging 示例改为 `AUTH_ENABLED=true` 且提供 `API_KEYS` 占位，并新增 `HEALTH_CHECKS_PUBLIC=false` / `HEALTH_ADMIN_TOKEN` 占位；`tests/test_config_examples.py` 锁死这两点。
 
-- [ ] **升级存在安全公告的 pytest 开发依赖**
+- [x] **升级存在安全公告的 pytest 开发依赖**（2026-09-27 完成）
   - 当前：`pytest>=8.3,<9`，环境中为 8.4.2。
   - 扫描：`pip-audit` 报告 `PYSEC-2026-1845`，修复版本 9.0.3。
   - 验收：升级后完整测试通过。
+  - 结果：`pyproject.toml` 改为 `pytest>=9.0.3,<10`，环境升级到 9.1.1；`pip-audit` 输出 `No known vulnerabilities found`；全量测试 116 passed。
 
 ## P0：RAG 能力真实性
 
@@ -120,6 +125,35 @@
 - 新增测试：`tests/test_schema_parity.py`。
 - 验证命令及结果：全新 SQLite 上 `alembic upgrade head` → `0007_document_updated_at (head)`，`documents` 表含 `updated_at`；parity 测试通过；pytest 全绿；Docker migrate 容器执行迁移后 API/Worker 正常。
 - 仍存在的限制：迁移仍是 forward-only，未补全 `downgrade`；`0001`–`0007` 只覆盖当前表结构，历史迁移未在 PostgreSQL 上逐一回归。
+
+## 已完成事项复盘（2026-09-27 第二轮：公开仓库安全加固）
+
+### 事项八：租户隔离（LangSmith 命名空间与 baseline 归属）
+
+- 根因：LangSmith Dataset 在账号内是全局命名空间，本地 `EvaluationDataset.name` 直接作为远端名称，两个租户取同名就会写进同一个远端 Dataset；`EvaluationRunner._baseline_diff` 用 `store.get_evaluation(baseline_id)` 取基线，而该方法不做租户过滤，跨租户基线会把别人的聚合指标算进本租户的 `baseline_diff`，再通过 `/evaluations/{id}/results` 返回。
+- 设计选择：远端名称统一走 `remote_dataset_name(tenant_id, name)` = `<name>--<tenant_hash(tenant_id)[:12]>`，`create_dataset`、`ensure_dataset`、`run_experiment` 三个入口都按租户解析，避免「查不到就建」的路径各自为政；基线在创建接口做租户校验（跨租户返回与不存在一致的 404，不回显对方 ID 是否存在），Runner 侧再做一次防御性跳过并打 warning。
+- 替代方案与取舍：没有给 `store.get_evaluation` 加租户参数——它同时被 Runner、CLI 和 health 使用，改签名会波及无关调用方，且路由层已有「取回后再比对租户」的既有模式；代价是校验点分散在两处，需要同时维护。远端名称用 hash 后缀而不是完整租户名，牺牲了运维可读性换取租户标识不外泄（可由本地库反查对应关系）。
+- 新增测试：`tests/test_langsmith_tenant_namespace.py`（命名空间稳定性、同名 Dataset 映射到不同远端名并走命名空间查询、实验按命名空间运行）、`tests/test_evaluation_tenant_scope.py`（跨租户基线 404 且不落库、Runner 跳过跨租户基线但同租户仍算差值）。
+- 验证命令及结果：pytest 全绿（新增 5 项）。
+- 仍存在的限制：命名空间无法阻止同租户内数据集重名（本地已有 409 校验）；远端孤儿 Dataset 仍不会随租户删除而清理。
+
+### 事项九：付费健康检查的保护与限流范围
+
+- 根因：`/health/llm` 会真实调用模型供应商，`/health/langsmith` 会调用 LangSmith 接口，两者都挂在根路由上且无认证；限流中间件的条件是 `path.startswith("/api/")`，因此这两个路径既不受认证约束也不受限流约束，构成「匿名可触发的付费调用」。
+- 设计选择：新增 `require_health_admin` 依赖与两个配置项。本地环境（`APP_ENV` ∈ development/local/test）或显式 `HEALTH_CHECKS_PUBLIC=true` 时放行，保持开发体验；其他环境要求 `X-Health-Token` 与 `HEALTH_ADMIN_TOKEN` 做 `secrets.compare_digest` 比较，令牌未配置时返回 503；限流中间件由「白名单前缀」改为「豁免清单」（`/health`、`/health/live`、`/health/ready`、`/metrics`、docs 与根路径），其余路径包括这两个端点全部计入限流。
+- 替代方案与取舍：没有采用「内网地址自动放行」——生产链路里 API 的调用方是 Nginx，来源永远是私网地址，这条规则等于没有保护；也没有把连通检查拆成独立管理端口，那需要额外的监听、反代与部署变更，收益不如令牌直接。限流豁免清单是精确匹配而不是前缀匹配，避免 `/health` 前缀把 `/health/llm` 一起豁免掉——这个细节在写测试时被显式验证过。
+- 新增测试：`tests/test_health_admin.py`（非开发环境缺令牌 401、错误令牌 401、正确令牌 200、未配置令牌 503、live/ready 仍 200、第二次调用 `/health/llm` 返回 429 且廉价路径不被计入）。
+- 验证命令及结果：pytest 全绿；临时把 503 分支改成放行后该测试立即失败（证明断言有效）。
+- 仍存在的限制：令牌是静态共享密钥，没有轮换与审计；`/metrics` 仍未鉴权，属于下一步；Nginx 层没有 IP 白名单作为第二道防线。
+
+### 事项十：部署示例与依赖扫描
+
+- 根因：`.env.staging.example` 默认 `AUTH_ENABLED=false` 且 `API_KEYS={}`，服务端会直接信任请求里的 `tenant_id`，示例即等于「可被任意人读写多租户数据」；`pyproject.toml` 的开发依赖固定在 `pytest>=8.3,<9`，命中 `PYSEC-2026-1845`（修复版本 9.0.3）。
+- 设计选择：staging 示例默认 `AUTH_ENABLED=true` 并提供 `API_KEYS` 占位；三个示例文件都补上 `HEALTH_CHECKS_PUBLIC=false` 与 `HEALTH_ADMIN_TOKEN`，本地示例留空（`APP_ENV=development` 自动豁免）；`pyproject.toml` 改为 `pytest>=9.0.3,<10` 并升级环境。新增 `tests/test_config_examples.py` 解析示例文件并断言认证开启、健康检查令牌存在，避免示例再次退化成无认证默认。
+- 替代方案与取舍：没有把 staging 改成仅绑定 `127.0.0.1`——那样前端与联调都不可用，认证是更符合真实部署的选择。示例里的令牌与 API Key 都是占位符而非真实凭据，因此仓库本身不含秘密，但也意味着「部署时必须替换」要靠文档和这两条测试提醒，而不是技术强制。
+- 新增测试：`tests/test_config_examples.py`。
+- 验证命令及结果：`pip-audit --progress-spinner off` → `No known vulnerabilities found`；pytest 9.1.1 下全量 116 passed。
+- 仍存在的限制：示例文件无法强制替换占位符；CI 尚未把 `pip-audit` 纳入门禁。
 
 ## P1：可靠性与安全
 

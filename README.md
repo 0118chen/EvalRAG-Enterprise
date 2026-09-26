@@ -37,12 +37,15 @@ python -m app.cli check-langsmith
 python -m app.cli reindex-document <document_id> --force
 ```
 
-运行中的 API 还提供真实连通检查：
+运行中的 API 还提供真实连通检查（`APP_ENV=development` 时可直接访问，其他环境必须带管理令牌）：
 
 ```bash
 curl http://localhost:8000/health/llm
 curl http://localhost:8000/health/langsmith
+curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 ```
+
+这两个端点会真实调用外部付费服务，因此非开发环境必须配置 `HEALTH_ADMIN_TOKEN`（未配置时直接返回 503 而不是放行），并且与其他路径一样计入限流；`/health/live`、`/health/ready` 和 `/metrics` 保持免限流的廉价探针。
 
 ### 阶段四：评测 API 与前端
 
@@ -70,6 +73,8 @@ curl http://localhost:8000/health/langsmith
 - Staging/Production Compose、GitHub Actions CI/CD。
 - PostgreSQL 备份与恢复脚本。
 - `/health/live`、`/health/ready` 和 Prometheus `/metrics`。
+- 外部连通检查（`/health/llm`、`/health/langsmith`）需要管理令牌，非开发环境未配置令牌时直接失败。
+- LangSmith Dataset 远端名称按租户命名空间隔离。
 
 ## 本地开发
 
