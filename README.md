@@ -24,10 +24,23 @@
 ### 阶段三：离线评测
 
 - 持久化评测数据集，每个样例包含问题、期望文档、页码和类别。
-- 本地 Experiment 计算 Recall@K、Precision@K、MRR、nDCG@K 和页码命中率。
-- Celery 异步执行实验，结果保存到数据库。
+- 本地 Experiment 一次检索同时计算 Recall@{1,3,5}、Precision@K、MRR、nDCG@{3,5} 和页码命中率，
+  并给出 `latency_ms_p50/p95`（同一排名算多个截断点，避免重跑导致的候选池变化）。
+- Celery 异步执行实验，结果保存到数据库；每条 retrieved 记录带 `chunk_id` 与 `text`，结果可复核。
 - 可选同步 Dataset 到 LangSmith，并使用 LangSmith `evaluate` 执行 Experiment。
 - CLI 支持运行实验和同步 Dataset。
+
+仓库自带一套 13 份法规、52 道页面级问题的评测集与六组配置的实测结果：
+
+```bash
+python -m scripts.audit_golden_set --json docs/evaluation/golden-set-audit.json   # 标注回验
+python -m scripts.run_golden_experiment --json docs/evaluation/run.json           # 六组配置对比
+python -m scripts.profile_retrieval --database data/experiments/golden.db         # 延迟归因
+```
+
+结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
+标注 52/52 可回验，但指标已饱和（BM25+重排在文档级指标上满分），
+且本地 32 维 hash 向量使 hybrid 反而低于纯 BM25。
 
 ```bash
 python -m app.cli run-evaluation <evaluation_id>
@@ -195,7 +208,7 @@ Windows PowerShell：
 ## 验证
 
 ```bash
-ruff check app tests alembic
+ruff check app tests alembic scripts
 pytest -q
 cd frontend && npm run build
 ```

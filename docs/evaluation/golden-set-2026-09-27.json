@@ -1,0 +1,286 @@
+{
+  "generated_at": "2026-09-26T18:39:19.386672+00:00",
+  "git_commit": "d210a78",
+  "corpus": {
+    "documents": 13,
+    "chunks": 316,
+    "versions": [
+      "latest"
+    ]
+  },
+  "dataset": {
+    "name": "rural-finance-regulations-golden",
+    "examples": 52,
+    "source": "law\\golden_eval_v1.json",
+    "top_k": 5
+  },
+  "embedding": {
+    "provider": "hash",
+    "dimensions": 32,
+    "dense_backend": "local",
+    "sparse_backend": "local"
+  },
+  "configs": [
+    {
+      "name": "sparse-bm25",
+      "isolates": "BM25 only, the no-frills baseline",
+      "retrieval_mode": "sparse",
+      "rerank": false,
+      "query_rewrite": false,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.9903846153846154,
+        "recall_at_1": 0.9807692307692307,
+        "ndcg_at_1": 0.9807692307692307,
+        "precision_at_1": 0.9807692307692307,
+        "recall_at_3": 1.0,
+        "ndcg_at_3": 0.9929024952609896,
+        "precision_at_3": 0.8269230769230769,
+        "recall_at_5": 1.0,
+        "ndcg_at_5": 0.9929024952609896,
+        "precision_at_5": 0.7769230769230769,
+        "page_hit": 1.0,
+        "example_count": 52,
+        "latency_ms": 687.0680019268408,
+        "latency_ms_p50": 685.3102999739349,
+        "latency_ms_p95": 866.4213999873027
+      },
+      "evidence_quote_hit_rate": 0.9615384615384616,
+      "expected_page_retrieved_rate": 1.0
+    },
+    {
+      "name": "sparse-bm25-rerank",
+      "isolates": "the reranking stage on top of BM25 alone",
+      "retrieval_mode": "sparse",
+      "rerank": true,
+      "query_rewrite": false,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 1.0,
+        "recall_at_1": 1.0,
+        "ndcg_at_1": 1.0,
+        "precision_at_1": 1.0,
+        "recall_at_3": 1.0,
+        "ndcg_at_3": 1.0,
+        "precision_at_3": 0.8205128205128205,
+        "recall_at_5": 1.0,
+        "ndcg_at_5": 1.0,
+        "precision_at_5": 0.7730769230769231,
+        "page_hit": 1.0,
+        "example_count": 52,
+        "latency_ms": 695.899642297613,
+        "latency_ms_p50": 696.982899971772,
+        "latency_ms_p95": 850.6931000156328
+      },
+      "evidence_quote_hit_rate": 0.9615384615384616,
+      "expected_page_retrieved_rate": 1.0
+    },
+    {
+      "name": "dense-hash",
+      "isolates": "the dense channel on its own (32-d hash embedding, no semantics)",
+      "retrieval_mode": "dense",
+      "rerank": false,
+      "query_rewrite": false,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.7858974358974359,
+        "recall_at_1": 0.6923076923076923,
+        "ndcg_at_1": 0.6923076923076923,
+        "precision_at_1": 0.6923076923076923,
+        "recall_at_3": 0.8846153846153846,
+        "ndcg_at_3": 0.8010509378434094,
+        "precision_at_3": 0.6410256410256411,
+        "recall_at_5": 0.9423076923076923,
+        "ndcg_at_5": 0.8250548979084349,
+        "precision_at_5": 0.6,
+        "page_hit": 0.7884615384615384,
+        "example_count": 52,
+        "latency_ms": 416.4492903733984,
+        "latency_ms_p50": 409.70740001648664,
+        "latency_ms_p95": 534.2629000078887
+      },
+      "evidence_quote_hit_rate": 0.6346153846153846,
+      "expected_page_retrieved_rate": 0.7884615384615384
+    },
+    {
+      "name": "hybrid-rrf",
+      "isolates": "RRF fusion of both channels, no rerank",
+      "retrieval_mode": "hybrid",
+      "rerank": false,
+      "query_rewrite": false,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.9407051282051282,
+        "recall_at_1": 0.9038461538461539,
+        "ndcg_at_1": 0.9038461538461539,
+        "precision_at_1": 0.9038461538461539,
+        "recall_at_3": 0.9807692307692307,
+        "ndcg_at_3": 0.9473434520604407,
+        "precision_at_3": 0.7884615384615384,
+        "recall_at_5": 1.0,
+        "ndcg_at_5": 0.9556256935618521,
+        "precision_at_5": 0.75,
+        "page_hit": 0.9038461538461539,
+        "example_count": 52,
+        "latency_ms": 1106.4109596135006,
+        "latency_ms_p50": 1087.11060002679,
+        "latency_ms_p95": 1311.316600011196
+      },
+      "evidence_quote_hit_rate": 0.8269230769230769,
+      "expected_page_retrieved_rate": 0.9038461538461539
+    },
+    {
+      "name": "hybrid-rrf-rerank",
+      "isolates": "reranking on top of the fusion",
+      "retrieval_mode": "hybrid",
+      "rerank": true,
+      "query_rewrite": false,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.9631410256410257,
+        "recall_at_1": 0.9423076923076923,
+        "ndcg_at_1": 0.9423076923076923,
+        "precision_at_1": 0.9423076923076923,
+        "recall_at_3": 0.9807692307692307,
+        "ndcg_at_3": 0.9640563414148358,
+        "precision_at_3": 0.7948717948717949,
+        "recall_at_5": 1.0,
+        "ndcg_at_5": 0.9723385829162472,
+        "precision_at_5": 0.7846153846153846,
+        "page_hit": 0.9230769230769231,
+        "example_count": 52,
+        "latency_ms": 1123.382199995551,
+        "latency_ms_p50": 1098.3090999652632,
+        "latency_ms_p95": 1318.2133000227623
+      },
+      "evidence_quote_hit_rate": 0.8461538461538461,
+      "expected_page_retrieved_rate": 0.9230769230769231
+    },
+    {
+      "name": "hybrid-rrf-rerank-rewrite",
+      "isolates": "rule-based query expansion on top of the product default",
+      "retrieval_mode": "hybrid",
+      "rerank": true,
+      "query_rewrite": true,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.9631410256410257,
+        "recall_at_1": 0.9423076923076923,
+        "ndcg_at_1": 0.9423076923076923,
+        "precision_at_1": 0.9423076923076923,
+        "recall_at_3": 0.9807692307692307,
+        "ndcg_at_3": 0.9640563414148358,
+        "precision_at_3": 0.8012820512820512,
+        "recall_at_5": 1.0,
+        "ndcg_at_5": 0.9723385829162472,
+        "precision_at_5": 0.7846153846153846,
+        "page_hit": 0.9423076923076923,
+        "example_count": 52,
+        "latency_ms": 1283.5826576920226,
+        "latency_ms_p50": 1142.159899987746,
+        "latency_ms_p95": 2268.464699969627
+      },
+      "evidence_quote_hit_rate": 0.8653846153846154,
+      "expected_page_retrieved_rate": 0.9423076923076923
+    }
+  ],
+  "reference": {
+    "random_document_hit_at_5": 0.24626101895937744,
+    "random_page_hit_at_5": 0.1595371558974693,
+    "chunks_per_document": 24.3
+  },
+  "by_category": {
+    "hybrid-rrf-rerank-rewrite": {
+      "业务经营": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "业务规范": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "定义": {
+        "examples": 11,
+        "recall_at_3": 0.9090909090909091,
+        "page_hit": 0.9090909090909091
+      },
+      "定义与比例": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "施行日期": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "期限": {
+        "examples": 8,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "期限与比例": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "法律责任": {
+        "examples": 6,
+        "recall_at_3": 1.0,
+        "page_hit": 0.8333333333333334
+      },
+      "法律适用": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "流程": {
+        "examples": 5,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "监督管理": {
+        "examples": 4,
+        "recall_at_3": 1.0,
+        "page_hit": 0.75
+      },
+      "监督管理与法律责任": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "组织治理": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "经营要求": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "设立条件": {
+        "examples": 2,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "资金运用": {
+        "examples": 1,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "适用对象": {
+        "examples": 2,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      },
+      "适用范围": {
+        "examples": 4,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0
+      }
+    }
+  }
+}

@@ -155,6 +155,49 @@
 - 验证命令及结果：`pip-audit --progress-spinner off` → `No known vulnerabilities found`；pytest 9.1.1 下全量 116 passed。
 - 仍存在的限制：示例文件无法强制替换占位符；CI 尚未把 `pip-audit` 纳入门禁。
 
+## 已完成事项复盘（2026-09-27 第三轮：golden set 审计与真实评测数字）
+
+原始数据：`docs/evaluation/golden-set-2026-09-27.json`、完整分析 `docs/evaluation-report.md`。
+
+### 事项十一：评测集质量审计
+
+- 做法：`scripts/audit_golden_set.py` 用与摄取完全相同的解析器重新抽取语料，
+  把每题的证据引文回原文里逐字查找，核对"是否在标注页"。
+- 结果：52/52 引文命中且页码一致；字段完整、问题不重复、13 份文件各 4 题、无越界页码；
+  答案中的数字均能在引文中找到。
+- 新发现的三个局限（记录在评测报告，未改动题集）：
+  1. 5 份 docx 解析页码恒为 1，20 道题的 `page_hit` 退化成文档级召回；
+  2. 《民法典》163/316 chunk（52% 语料）却只占 4/52 题；
+  3. 三份《贷款管理办法》的"贷款人"定义引文逐字相同，文档级标签对这三题不可区分。
+
+### 事项十二：评测指标从单一 k 扩展到多 k + 分位延迟
+
+- 动机：`retrieval_metrics(example, k)` 只在 `top_k` 一个截断点上算指标，
+  重新跑一次 top_k=1 会改变候选池，跨 k 的数字不可比。
+- 设计选择：一次检索出排名，对同一条排名计算 Recall@{1,3,5}/nDCG@{3,5}/{precision}，
+  截断点上限受 `top_k` 约束（`top_k=3` 时不出 `recall_at_5`，避免造数）；
+  聚合层增加 `latency_ms_p50/p95`（nearest-rank，空集不返回伪值）。
+- 新增测试：`tests/test_evaluation.py`（多截断点、分位函数边界）、
+  `tests/test_evaluation_runner.py`（Runner 落库的指标键、`retrieved` 里带 `chunk_id`/`text`）。
+- 附带的契约变化：评测结果每条 retrieved 现在带 `chunk_id` 与 `text`，
+  使结果可复核（也是 `quote_hit` 这类脚本侧指标能做出来的前提）。
+
+### 事项十三：第一次真实评测给出的三个结论
+
+- 指标饱和：BM25+词面重排在文档级/页级指标上全部 1.000，题集没有留下改进空间；
+  随机 5-chunk 基线为文档 0.246 / 页 0.160。
+- 负向优化被证实：`EMBEDDING_PROVIDER=hash` 的 32 维向量使 dense 通道 R@1 只有 0.692，
+  等权 RRF 融合后 hybrid R@1 0.904 < BM25 0.981；逐题对照 6:0（BM25+重排严格更优，无反向案例）。
+- 延迟归因：单次检索 p50 685 ms（BM25）/ 1087 ms（hybrid），缓存关闭、316 chunk；
+  由配置差值可分解为"全语料嵌入 ~400 ms + BM25 全量打分 ~280 ms"。
+
+### 事项十四：顺手修正的两处工程问题
+
+- `app/core/ingestion.py` 由 `import fitz` 改为 `import pymupdf`：
+  每次摄取都会打印弃用警告，而 `pyproject.toml` 已约束 `pymupdf>=1.25`。
+- `scripts/` 纳入 lint 门禁（`.github/workflows/ci.yml` 与 README 的验证命令），
+  并修掉 `scripts/generate_golden_set.py` 的类型检查告警。
+
 ## P1：可靠性与安全
 
 - [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
@@ -173,7 +216,15 @@
 
 ## P1：性能与数据模型
 
-- [ ] 消除“整库 Chunk 加载 + Python 全量扫描”的查询路径。
+- [ ] 消除"整库 Chunk 加载 + Python 全量扫描"的查询路径。（2026-09-27 已量化，见评测报告 F5）
+  - 实测：316 chunk 下单次检索 p50 685 ms（sparse）/1087 ms（hybrid），缓存关闭。
+  - 原因一：`app/core/retrieval.py::retrieve` 在 `mode` 分支之前无条件计算两个通道，
+    dense 分数算完即丢，sparse 配置也在为全语料嵌入付钱（`retrieve` 结束才判 `mode == "sparse"`）。
+  - 原因二：`RetrievalService._build_retriever` 每查询新建 `LocalRetriever`，BM25 每次都对全语料重新分词，
+    没有倒排索引与文档长度统计的复用。
+  - 原因三：`HybridRetriever` 组合两个 `LocalRetriever`，而每个 `LocalRetriever` 内部又走完整 `retrieve()`，
+    同一语料被嵌入两遍（profile 实测每查询 `embed()` 634 次 = 316 × 2）。
+  - 验收：改造后在同一脚本重跑，给出改造前后 p50/p95 对照（推断量级：sparse ~280 ms、hybrid ~700 ms）。
 - [x] async 路由改用 AsyncSession、`redis.asyncio`，避免同步 I/O 阻塞事件循环。（2026-09-27 完成缓存/限流与存储调用部分；AsyncSession 未做）
 - [ ] 状态字段增加 Enum/CheckConstraint，评测参数和结果在 PostgreSQL 使用 JSONB。
 - [ ] 补齐外键、级联删除和数据库级跨租户一致性约束。
@@ -182,6 +233,10 @@
 
 ## P1：评测、可观测性与 CI
 
+- [ ] 提升评测集区分度：当前 52 题在 BM25+重排下文档级指标全为 1.000，配置之间无法区分。
+  - 方向：提问不点名法规、跨文档多跳、同义改写、引入相近干扰文档。
+- [ ] 把"证据引文命中"做成产品内指标（`evaluation_example` 增 `evidence_quote`），
+  目前它是脚本侧派生指标（`scripts/run_golden_experiment.py`），不进评测接口。
 - [ ] 评测 Runner 增加有界并发、单样例超时、进度、checkpoint、失败样例重试和取消能力。
 - [ ] 接入标准 Prometheus Histogram/Counter，并覆盖 Cache、Retrieval、Celery、DB Pool 指标。
 - [ ] LangSmith 关闭时将 Trace 持久化到结构化日志、数据库或 OpenTelemetry Collector。
