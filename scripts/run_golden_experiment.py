@@ -249,6 +249,41 @@ def run_config(
     return evaluation["results"]
 
 
+def per_example(results: dict, golden_by_question: dict[str, dict]) -> list[dict]:
+    """Per-question rows, so a headline number can be traced back to its questions.
+
+    Chunk text stays out of here on purpose: the point is to make claims checkable
+    without turning the result file into a copy of the corpus.
+    """
+    rows = []
+    for item in results["examples"]:
+        golden = golden_by_question[item["question"]]
+        quote = normalize(golden["evidence_quote"])
+        retrieved = item["retrieved"]
+        rows.append(
+            {
+                "question": item["question"],
+                "category": item["category"],
+                "source_filename": golden["source_filename"],
+                "expected_page": item["expected_page"],
+                "recall_at_1": item["metrics"].get("recall_at_1"),
+                "recall_at_5": item["metrics"].get("recall_at_5"),
+                "page_hit": item["metrics"].get("page_hit"),
+                "quote_hit": any(quote in normalize(chunk.get("text", "")) for chunk in retrieved),
+                "latency_ms": round(item["latency_ms"], 1),
+                "retrieved": [
+                    {
+                        "document_id": chunk["document_id"],
+                        "page": chunk["page"],
+                        "score": round(chunk["score"], 4),
+                    }
+                    for chunk in retrieved
+                ],
+            }
+        )
+    return rows
+
+
 def evidence_stats(results: dict, golden_by_question: dict[str, dict]) -> dict[str, float]:
     """A retrieved chunk containing the ground-truth quote is the passage that answers it."""
     exact = 0
@@ -347,6 +382,7 @@ def main() -> None:
         results = run_config(
             store, settings, retrieval_service, traces, args.tenant, kb_id, dataset, config
         )
+        evidence = evidence_stats(results, golden_by_question)
         entry = {
             "name": config["name"],
             "isolates": config["isolates"],
@@ -355,7 +391,8 @@ def main() -> None:
             "query_rewrite": config["query_rewrite"],
             "top_k": TOP_K,
             "metrics": results["metrics"],
-            **evidence_stats(results, golden_by_question),
+            **evidence,
+            "per_example": per_example(results, golden_by_question),
         }
         configs.append(entry)
         last_results, last_config = results, config
