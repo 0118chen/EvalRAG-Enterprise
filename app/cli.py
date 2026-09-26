@@ -82,6 +82,7 @@ def main() -> None:
     remote_id = container.langsmith.ensure_dataset(
         dataset.name,
         dataset.description,
+        tenant_id=dataset.tenant_id,
     )
     if not remote_id:
         raise SystemExit("LangSmith is disabled or unavailable")

@@ -56,6 +56,7 @@ def create_dataset(
     remote_dataset_id = container.langsmith.ensure_dataset(
         dataset.name,
         dataset.description,
+        tenant_id=tenant_id,
     )
     if remote_dataset_id:
         container.langsmith.create_examples(
@@ -137,6 +138,12 @@ def create_evaluation(
             status_code=503,
             detail="answer evaluation requires a configured LLM",
         )
+    if payload.baseline_evaluation_id:
+        baseline = container.store.get_evaluation(payload.baseline_evaluation_id)
+        if not baseline or baseline["tenant_id"] != tenant_id:
+            # Same 404 as a missing baseline so the endpoint does not confirm
+            # that another tenant's evaluation id exists.
+            raise HTTPException(status_code=404, detail="baseline evaluation not found")
     evaluation_id = str(uuid4())
     parameters = {
         "document_version": payload.document_version,

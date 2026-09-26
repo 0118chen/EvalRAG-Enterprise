@@ -1,5 +1,6 @@
 """Execute persisted retrieval experiments against a versioned knowledge base."""
 
+import logging
 from dataclasses import dataclass
 from statistics import fmean
 from time import perf_counter
@@ -12,6 +13,8 @@ from app.core.langsmith_eval import LangSmithEvaluationAdapter
 from app.core.observability import TraceManager
 from app.core.rag import answer_with_evidence
 from app.core.retrieval_service import RetrievalService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -288,6 +291,7 @@ class EvaluationRunner:
 
         return await self.langsmith.run_experiment(
             dataset_name=dataset.name,
+            tenant_id=evaluation["tenant_id"],
             target=target,
             evaluators=[
                 self.langsmith.recall_evaluator,
@@ -314,6 +318,14 @@ class EvaluationRunner:
             return None
         baseline = self.store.get_evaluation(baseline_id)
         if not baseline or baseline.get("status") != "completed":
+            return None
+        if baseline.get("tenant_id") != evaluation.get("tenant_id"):
+            # The baseline lookup is not tenant filtered, so a stored reference
+            # from another tenant must never leak into this tenant's metrics.
+            logger.warning(
+                "ignoring baseline %s: it belongs to a different tenant",
+                baseline_id,
+            )
             return None
         baseline_metrics = (baseline.get("results") or {}).get("metrics", {})
         return {

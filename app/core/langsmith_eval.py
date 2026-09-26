@@ -15,6 +15,20 @@ from app.core.observability import redact, tenant_hash
 logger = logging.getLogger(__name__)
 
 
+def remote_dataset_name(tenant_id: str | None, name: str) -> str:
+    """Namespace a local dataset name with a per-tenant suffix.
+
+    LangSmith datasets live in one account-wide namespace, so two tenants that
+    both call their dataset "policy-eval" would otherwise create one remote
+    dataset and write each other's examples into it. The suffix is a truncated
+    tenant hash so the remote name does not expose the raw tenant identifier.
+    """
+    if not tenant_id:
+        return name
+    return f"{name}--{tenant_hash(tenant_id)[:12]}"
+
+
+
 def dataset_example(
     question: str,
     knowledge_base_id: str,
@@ -47,21 +61,37 @@ class LangSmithEvaluationAdapter:
     def enabled(self) -> bool:
         return bool(self.settings.langsmith_enabled and self.settings.langsmith_api_key)
 
-    def create_dataset(self, name: str, description: str = "") -> str | None:
+    def create_dataset(
+        self,
+        name: str,
+        description: str = "",
+        *,
+        tenant_id: str | None = None,
+    ) -> str | None:
         if not self.enabled:
             return None
         try:
             from langsmith import Client
             client = Client(api_key=self.settings.langsmith_api_key, api_url=self.settings.langsmith_endpoint)
-            dataset = client.create_dataset(dataset_name=name, description=description)
+            dataset = client.create_dataset(
+                dataset_name=remote_dataset_name(tenant_id, name),
+                description=description,
+            )
             return str(dataset.id)
         except Exception:
             logger.warning("LangSmith dataset creation failed", exc_info=True)
             return None
 
-    def ensure_dataset(self, name: str, description: str = "") -> str | None:
+    def ensure_dataset(
+        self,
+        name: str,
+        description: str = "",
+        *,
+        tenant_id: str | None = None,
+    ) -> str | None:
         if not self.enabled:
             return None
+        remote_name = remote_dataset_name(tenant_id, name)
         try:
             from langsmith import Client
 
@@ -70,14 +100,14 @@ class LangSmithEvaluationAdapter:
                 api_url=self.settings.langsmith_endpoint,
             )
             dataset = next(
-                client.list_datasets(dataset_name=name, limit=1),
+                client.list_datasets(dataset_name=remote_name, limit=1),
                 None,
             )
             if dataset:
                 return str(dataset.id)
         except Exception:
             logger.warning("LangSmith dataset lookup failed", exc_info=True)
-        return self.create_dataset(name, description)
+        return self.create_dataset(name, description, tenant_id=tenant_id)
 
     def health(self) -> dict[str, Any]:
         if not self.enabled:
@@ -173,6 +203,7 @@ class LangSmithEvaluationAdapter:
         self,
         *,
         dataset_name: str,
+        tenant_id: str | None = None,
         target,
         evaluators,
         experiment_prefix: str,
@@ -189,7 +220,7 @@ class LangSmithEvaluationAdapter:
             )
             result = await aevaluate(
                 target,
-                data=dataset_name,
+                data=remote_dataset_name(tenant_id, dataset_name),
                 evaluators=evaluators,
                 experiment_prefix=experiment_prefix,
                 metadata=metadata,
