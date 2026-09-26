@@ -8,7 +8,7 @@ from typing import Any
 
 from app.config import Settings
 from app.core.answer_evaluation import judge_answer
-from app.core.evaluation import RetrievalExample, retrieval_metrics
+from app.core.evaluation import RetrievalExample, latency_percentiles, metrics_at_k
 from app.core.langsmith_eval import LangSmithEvaluationAdapter
 from app.core.observability import TraceManager
 from app.core.rag import answer_with_evidence
@@ -96,9 +96,12 @@ class EvaluationRunner:
                     if values
                 }
                 aggregate["example_count"] = len(examples)
-                aggregate["latency_ms"] = fmean(
-                    [item["latency_ms"] for item in examples]
-                )
+                latencies = [item["latency_ms"] for item in examples]
+                aggregate["latency_ms"] = fmean(latencies)
+                percentiles = latency_percentiles(latencies)
+                if percentiles:
+                    aggregate["latency_ms_p50"] = percentiles["p50"]
+                    aggregate["latency_ms_p95"] = percentiles["p95"]
                 langsmith_result = await self._run_langsmith(
                     evaluation,
                     dataset,
@@ -179,7 +182,14 @@ class EvaluationRunner:
                     expected_document_id=example.expected_document_id,
                     retrieved_document_ids=retrieved_ids,
                 )
-                metrics = retrieval_metrics(metric_example, evaluation["top_k"])
+                cutoffs = tuple(
+                    sorted(
+                        k
+                        for k in (1, 3, 5, evaluation["top_k"])
+                        if 0 < k <= evaluation["top_k"]
+                    )
+                )
+                metrics = metrics_at_k(metric_example, cutoffs)
                 page_hit = any(
                     chunk.document_id == example.expected_document_id
                     and (
@@ -225,10 +235,12 @@ class EvaluationRunner:
                     "judge_reason": judge_reason,
                     "retrieved": [
                         {
+                            "chunk_id": chunk.id,
                             "document_id": chunk.document_id,
                             "page": chunk.page,
                             "version": chunk.version,
                             "score": score,
+                            "text": chunk.text,
                         }
                         for chunk, score in metric_results
                     ],

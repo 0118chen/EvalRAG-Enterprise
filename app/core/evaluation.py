@@ -1,5 +1,7 @@
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from math import log2
+from math import ceil, log2
+from statistics import fmean
 from typing import Any
 
 
@@ -42,6 +44,39 @@ def retrieval_metrics(example: RetrievalExample, k: int) -> dict[str, float]:
         "mrr": reciprocal_rank(example),
         f"precision_at_{k}": precision_at_k(example, k),
         f"ndcg_at_{k}": ndcg_at_k(example, k),
+    }
+
+
+def metrics_at_k(example: RetrievalExample, cutoffs: Iterable[int]) -> dict[str, float]:
+    """Report every cutoff from a single ranking.
+
+    One retrieval run produces one ranking, so measuring Recall@1 and Recall@5
+    from the same list keeps the numbers comparable; re-running retrieval with a
+    different top_k would change the candidate pool and therefore the ranking.
+    """
+    metrics: dict[str, float] = {"mrr": reciprocal_rank(example)}
+    for k in cutoffs:
+        metrics[f"recall_at_{k}"] = recall_at_k(example, k)
+        metrics[f"ndcg_at_{k}"] = ndcg_at_k(example, k)
+        metrics[f"precision_at_{k}"] = precision_at_k(example, k)
+    return metrics
+
+
+def latency_percentiles(values: Sequence[float]) -> dict[str, float]:
+    """Nearest-rank percentiles; empty input returns no keys rather than zeros."""
+    if not values:
+        return {}
+    ordered = sorted(values)
+
+    def at(percent: float) -> float:
+        index = max(0, ceil(len(ordered) * percent / 100) - 1)
+        return ordered[min(index, len(ordered) - 1)]
+
+    return {
+        "p50": at(50),
+        "p95": at(95),
+        "p100": at(100),
+        "mean": fmean(ordered),
     }
 
 

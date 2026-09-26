@@ -24,8 +24,9 @@ class FakeJudgeLLM:
         return "贷款政策生效日期为一月一日。"
 
 
-def test_evaluation_runner_persists_real_metrics(tmp_path) -> None:
-    settings = Settings(logsmith_enabled=False)
+def _prepared_runner(tmp_path):
+    """One document, one chunk and one golden example, wired exactly as production is."""
+    settings = Settings(langsmith_enabled=False)
     store = SQLiteStore(str(tmp_path / "eval.db"))
     store.save_knowledge_base(
         KnowledgeBase(id="kb", tenant_id="tenant", name="Policy", description="")
@@ -88,15 +89,19 @@ def test_evaluation_runner_persists_real_metrics(tmp_path) -> None:
         IdentityQueryRewriter(),
         LexicalReranker(),
     )
-    result = asyncio.run(
-        EvaluationRunner(
-            settings,
-            store,
-            retrieval,
-            traces,
-            llm=FakeJudgeLLM(),
-        ).run("eval")
+    runner = EvaluationRunner(
+        settings,
+        store,
+        retrieval,
+        traces,
+        llm=FakeJudgeLLM(),
     )
+    return runner, store
+
+
+def test_evaluation_runner_persists_real_metrics(tmp_path) -> None:
+    runner, _store = _prepared_runner(tmp_path)
+    result = asyncio.run(runner.run("eval"))
     assert result["status"] == "completed"
     assert result["results"]["metrics"]["recall_at_3"] == 1.0
     assert result["results"]["metrics"]["page_hit"] == 1.0
@@ -104,3 +109,19 @@ def test_evaluation_runner_persists_real_metrics(tmp_path) -> None:
     assert result["results"]["metrics"]["answer_faithfulness"] == 1.0
     assert result["results"]["metrics"]["answer_completeness"] == 1.0
     assert result["results"]["examples"][0]["retrieved"][0]["version"] == "v1"
+
+
+def test_evaluation_runner_reports_every_cutoff_latency_and_retrieved_text(tmp_path) -> None:
+    runner, _store = _prepared_runner(tmp_path)
+
+    result = asyncio.run(runner.run("eval"))
+
+    metrics = result["results"]["metrics"]
+    assert {"recall_at_1", "recall_at_3", "ndcg_at_3", "precision_at_3"} <= set(metrics)
+    # top_k=3 caps the reported cutoffs: Recall@5 could not be measured honestly.
+    assert "recall_at_5" not in metrics
+    assert metrics["latency_ms_p50"] > 0
+    assert metrics["latency_ms_p95"] >= metrics["latency_ms_p50"]
+    retrieved = result["results"]["examples"][0]["retrieved"]
+    assert retrieved[0]["chunk_id"] == "chunk"
+    assert retrieved[0]["text"] == "loan policy effective date"
