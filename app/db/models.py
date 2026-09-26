@@ -35,6 +35,12 @@ class DocumentRecord(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[str] = mapped_column(String(64), default="latest", server_default="latest")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
 
 
 class ChunkRecord(Base):

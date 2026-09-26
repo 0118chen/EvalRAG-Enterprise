@@ -1,10 +1,12 @@
 """Database persistence shared by local development and production deployments."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
-from sqlalchemy import create_engine, delete, event, select, update
+from sqlalchemy import and_, create_engine, delete, event, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.core.ingestion import Chunk
@@ -17,6 +19,7 @@ from app.db.models import (
     EvaluationRecord,
     FeedbackRecord,
     KnowledgeBaseRecord,
+    utc_now,
 )
 from app.schemas import (
     Document,
@@ -201,7 +204,11 @@ class SQLAlchemyStore:
 
     def update_document_status(self, document_id: str, status: str) -> None:
         with Session(self.engine) as session:
-            session.execute(update(DocumentRecord).where(DocumentRecord.id == document_id).values(status=status))
+            session.execute(
+                update(DocumentRecord)
+                .where(DocumentRecord.id == document_id)
+                .values(status=status, updated_at=utc_now())
+            )
             session.commit()
 
     def update_document_progress(self, document_id: str, progress: int, error_message: str | None = None) -> None:
@@ -209,9 +216,56 @@ class SQLAlchemyStore:
             session.execute(
                 update(DocumentRecord)
                 .where(DocumentRecord.id == document_id)
-                .values(progress=progress, error_message=error_message)
+                .values(progress=progress, error_message=error_message, updated_at=utc_now())
             )
             session.commit()
+
+    def claim_document(
+        self,
+        document_id: str,
+        *,
+        force: bool = False,
+        stale_after_seconds: int = 900,
+        now: datetime | None = None,
+    ) -> bool:
+        """Atomically take ownership of one document so a single worker processes it.
+
+        The claim is a single conditional UPDATE, so two workers receiving the same
+        task cannot both proceed: only one of them sees ``rowcount == 1``. Queued and
+        previously failed documents are claimable, a ``ready`` document only when
+        ``force`` is set to rebuild it, and a ``processing`` document only once its
+        timestamp looks stale (the previous worker died and Celery redelivered).
+        """
+        current = now or utc_now()
+        stale_before = current - timedelta(seconds=stale_after_seconds)
+        claimable = [
+            DocumentRecord.status.in_(("pending", "failed")),
+            and_(
+                DocumentRecord.status == "processing",
+                or_(
+                    DocumentRecord.updated_at.is_(None),
+                    DocumentRecord.updated_at <= stale_before,
+                ),
+            ),
+        ]
+        if force:
+            claimable.append(DocumentRecord.status == "ready")
+        with Session(self.engine) as session:
+            result = cast(
+                CursorResult,
+                session.execute(
+                    update(DocumentRecord)
+                    .where(DocumentRecord.id == document_id, or_(*claimable))
+                    .values(
+                        status="processing",
+                        progress=0,
+                        error_message=None,
+                        updated_at=current,
+                    )
+                ),
+            )
+            session.commit()
+            return result.rowcount == 1
 
     def replace_chunks(self, document_id: str, knowledge_base_id: str, chunks: list[Chunk]) -> None:
         """Atomically replace a document index and keep its chunk count accurate."""

@@ -1,14 +1,30 @@
-import asyncio
-
+from app import tasks
 from app.core.store import SQLiteStore
 from app.schemas import Document, KnowledgeBase
 from app.tasks import process_document
 
 
-def test_ready_document_is_not_processed_twice(tmp_path) -> None:
+def test_ready_document_is_not_processed_twice(tmp_path, monkeypatch) -> None:
     store = SQLiteStore(str(tmp_path / "idempotent.db"))
-    store.save_knowledge_base(KnowledgeBase(id="kb", tenant_id="t", name="x", description=""))
-    store.save_document(Document(id="ready-doc", filename="x.txt", knowledge_base_id="kb", chunks=0, status="ready"), [])
-    # The production task uses the configured DB; this assertion documents the contract
-    # through the task's deterministic missing-file behavior when no shared DB is configured.
-    assert asyncio.iscoroutinefunction(getattr(process_document, "run", process_document)) is False
+    store.save_knowledge_base(
+        KnowledgeBase(id="kb", tenant_id="t", name="x", description="")
+    )
+    store.save_document(
+        Document(
+            id="ready-doc",
+            filename="x.txt",
+            knowledge_base_id="kb",
+            chunks=1,
+            status="ready",
+        ),
+        [],
+    )
+    monkeypatch.setattr(tasks, "create_store", lambda database_url: store)
+
+    function = process_document.run if hasattr(process_document, "run") else process_document
+    result = function("ready-doc")
+
+    assert result["stage"] == "already_indexed"
+    assert result["status"] == "ready"
+    # An already indexed document is not claimable without an explicit rebuild.
+    assert store.claim_document("ready-doc") is False

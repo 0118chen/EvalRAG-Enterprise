@@ -29,13 +29,23 @@ except ImportError:  # pragma: no cover - dependencies are installed in producti
 
 
 def process_document(document_id: str, force: bool = False) -> dict[str, str]:
-    """Process one persisted upload; Celery retries can safely re-run this task."""
+    """Process one persisted upload; concurrent or retried deliveries stay safe."""
     store = create_store(settings.database_url)
     document = store.get_document_any(document_id)
     if not document:
         return {"document_id": document_id, "status": "failed", "stage": "missing"}
     if document.status == "ready" and not force:
         return {"document_id": document_id, "status": "ready", "stage": "already_indexed", "progress": "100"}
+    if not store.claim_document(document_id, force=force):
+        # Another worker already owns this document, or it finished between the
+        # read above and the claim. Returning normally avoids pointless retries.
+        current = store.get_document_any(document_id)
+        return {
+            "document_id": document_id,
+            "status": current.status if current else "unknown",
+            "stage": "not_claimed",
+            "progress": str(current.progress) if current else "0",
+        }
     try:
         with traces.span(
             "ingestion.document",

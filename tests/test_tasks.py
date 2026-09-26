@@ -1,96 +1,166 @@
-from types import SimpleNamespace
+from datetime import timedelta
+
+import pytest
 
 from app import tasks
+from app.core.embeddings import HashEmbedding
+from app.core.pipeline import IngestionPipeline
+from app.core.store import SQLiteStore
+from app.db.models import utc_now
+from app.schemas import Document, KnowledgeBase
 from app.tasks import process_document
 
+KB = "kb-policy"
+DOC = "doc-1"
+VERSION = "v3"
 
-def test_document_task_contract() -> None:
-    result = process_document.run("doc-1") if hasattr(process_document, "run") else process_document("doc-1")
-    assert result["document_id"] == "doc-1"
+
+class RecordingIndexer:
+    """Stand-in for an external chunk indexer that records what it received."""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.calls: list[tuple[list, tuple]] = []
+        self.deleted: list[str] = []
+        self.fail = fail
+
+    async def upsert(self, chunks, *args):
+        if self.fail:
+            raise RuntimeError("external index unavailable")
+        self.calls.append((list(chunks), args))
+        return len(chunks)
+
+    async def delete_document(self, document_id: str) -> int:
+        self.deleted.append(document_id)
+        return 0
 
 
-def test_document_worker_uses_configured_index_pipeline(monkeypatch, tmp_path) -> None:
-    calls = []
+def _run(document_id: str, force: bool = False) -> dict:
+    function = process_document.run if hasattr(process_document, "run") else process_document
+    return function(document_id, force=force)
 
-    class FakeStore:
-        def get_document_any(self, document_id):
-            return SimpleNamespace(
-                id=document_id,
-                status="processing",
-                knowledge_base_id="kb-policy",
-                version="v3",
-                filename="policy.txt",
-            )
 
-        def update_document_progress(self, *args):
-            pass
-
-        def replace_chunks(self, *args):
-            pass
-
-        def update_document_status(self, *args):
-            pass
-
-    class FakePipeline:
-        async def replace_document(self, chunks, knowledge_base_id, document_id):
-            calls.append((knowledge_base_id, document_id, len(chunks)))
-            return len(chunks)
-
-    upload_dir = tmp_path / "data" / "uploads"
-    upload_dir.mkdir(parents=True)
-    (upload_dir / "doc-1_policy.txt").write_text("policy text", encoding="utf-8")
+def _seed(tmp_path, monkeypatch, *, status: str = "pending") -> SQLiteStore:
+    store = SQLiteStore(str(tmp_path / "tasks.db"))
+    store.save_knowledge_base(
+        KnowledgeBase(id=KB, tenant_id="tenant-1", name="policy", description="")
+    )
+    store.save_document(
+        Document(
+            id=DOC,
+            filename="policy.txt",
+            knowledge_base_id=KB,
+            chunks=0,
+            status=status,
+            version=VERSION,
+        ),
+        [],
+    )
+    uploads = tmp_path / "data" / "uploads"
+    uploads.mkdir(parents=True)
+    (uploads / f"{DOC}_policy.txt").write_text(
+        "农户贷款应遵循依法合规、审慎经营的原则。",
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(tasks, "create_store", lambda database_url: FakeStore())
-    monkeypatch.setattr(
-        tasks,
-        "create_ingestion_pipeline",
-        lambda settings: FakePipeline(),
-        raising=False,
+    monkeypatch.setattr(tasks, "create_store", lambda database_url: store)
+    return store
+
+
+def _pipeline(dense, sparse) -> IngestionPipeline:
+    return IngestionPipeline(
+        local_index=None,
+        dense_indexer=dense,
+        sparse_indexer=sparse,
+        embedding=HashEmbedding(4),
     )
 
-    function = process_document.run if hasattr(process_document, "run") else process_document
-    result = function("doc-1")
 
-    assert result["status"] == "ready"
-    assert calls == [("kb-policy", "doc-1", 1)]
+def test_worker_writes_every_configured_backend_and_the_database(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch)
+    dense, sparse = RecordingIndexer(), RecordingIndexer()
+    monkeypatch.setattr(
+        tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
+    )
+
+    result = _run(DOC)
+
+    assert result == {
+        "document_id": DOC,
+        "status": "ready",
+        "stage": "indexed",
+        "progress": "100",
+    }
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "ready"
+    assert document.chunks == 1
+
+    chunks = store.get_chunks(KB, VERSION)
+    assert [chunk.version for chunk in chunks] == [VERSION]
+
+    # Replacing a document clears previous rows in both external indexes first.
+    assert dense.deleted == [DOC]
+    assert sparse.deleted == [DOC]
+
+    dense_chunks, dense_args = dense.calls[0]
+    assert [chunk.id for chunk in dense_chunks] == [chunk.id for chunk in chunks]
+    vectors, dense_knowledge_base = dense_args
+    assert dense_knowledge_base == KB
+    assert [len(vector) for vector in vectors] == [4]
+
+    sparse_chunks, sparse_args = sparse.calls[0]
+    assert [chunk.id for chunk in sparse_chunks] == [chunk.id for chunk in chunks]
+    assert sparse_args == (KB,)
 
 
-def test_force_reindex_processes_ready_document(monkeypatch, tmp_path) -> None:
-    calls = []
+def test_concurrent_delivery_cannot_reindex_a_claimed_document(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch)
+    dense, sparse = RecordingIndexer(), RecordingIndexer()
+    monkeypatch.setattr(
+        tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
+    )
 
-    class FakeStore:
-        def get_document_any(self, document_id):
-            return SimpleNamespace(
-                id=document_id,
-                status="ready",
-                knowledge_base_id="kb-policy",
-                version="v3",
-                filename="policy.txt",
-            )
+    # A first worker already owns the document.
+    assert store.claim_document(DOC) is True
 
-        def update_document_progress(self, *args):
-            pass
+    result = _run(DOC)
 
-        def replace_chunks(self, *args):
-            pass
+    assert result["stage"] == "not_claimed"
+    assert result["status"] == "processing"
+    assert dense.calls == []
+    assert sparse.calls == []
 
-        def update_document_status(self, *args):
-            pass
 
-    class FakePipeline:
-        async def replace_document(self, chunks, knowledge_base_id, document_id):
-            calls.append(document_id)
-            return len(chunks)
+def test_claim_is_atomic_and_ready_documents_need_force(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch, status="ready")
 
-    upload_dir = tmp_path / "data" / "uploads"
-    upload_dir.mkdir(parents=True)
-    (upload_dir / "ready-doc_policy.txt").write_text("policy text", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(tasks, "create_store", lambda database_url: FakeStore())
-    monkeypatch.setattr(tasks, "create_ingestion_pipeline", lambda settings: FakePipeline())
+    assert store.claim_document(DOC) is False
+    assert store.claim_document(DOC, force=True) is True
+    assert store.claim_document(DOC, force=True) is False
 
-    function = process_document.run if hasattr(process_document, "run") else process_document
-    result = function("ready-doc", force=True)
 
-    assert result["stage"] == "indexed"
-    assert calls == ["ready-doc"]
+def test_stale_processing_document_can_be_reclaimed(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch, status="processing")
+
+    assert store.claim_document(DOC, stale_after_seconds=900) is False
+    assert store.claim_document(DOC, now=utc_now() + timedelta(seconds=901)) is True
+
+
+def test_external_index_failure_keeps_document_failed_and_db_unchanged(
+    tmp_path, monkeypatch
+) -> None:
+    store = _seed(tmp_path, monkeypatch)
+    dense, sparse = RecordingIndexer(), RecordingIndexer(fail=True)
+    monkeypatch.setattr(
+        tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
+    )
+
+    with pytest.raises(RuntimeError):
+        _run(DOC)
+
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "failed"
+    assert document.error_message == "external index unavailable"
+    # Local chunks are only written after every external write succeeded.
+    assert store.get_chunks(KB, VERSION) == []
