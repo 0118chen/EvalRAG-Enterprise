@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.config import Settings
+from app.main import app, create_app
 
 client = TestClient(app)
 
@@ -31,3 +32,25 @@ def test_metrics_endpoint_is_prometheus_compatible() -> None:
     response = client.get("/metrics")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
+
+
+def test_llm_health_reports_mock_mode(tmp_path) -> None:
+    isolated_client = TestClient(
+        create_app(
+            Settings(
+                database_url=f"sqlite:///{(tmp_path / 'llm-health.db').as_posix()}",
+                llm_provider="mock",
+                langsmith_enabled=False,
+                langsmith_api_key=None,
+            )
+        )
+    )
+    response = isolated_client.get("/health/llm")
+    assert response.status_code == 200
+    assert response.json()["status"] == "mock"
+    assert response.json()["connected"] is False
+
+    langsmith_response = isolated_client.get("/health/langsmith")
+    assert langsmith_response.status_code == 200
+    assert langsmith_response.json()["status"] == "disabled"
+    assert langsmith_response.json()["connected"] is False
