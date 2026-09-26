@@ -14,8 +14,9 @@ class Chunk:
 def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
     lower = filename.lower()
     if lower.endswith(".pdf"):
-        import fitz
-        document = fitz.open(stream=payload, filetype="pdf")
+        import pymupdf
+
+        document = pymupdf.open(stream=payload, filetype="pdf")
         return [(index + 1, page.get_text()) for index, page in enumerate(document)]
     if lower.endswith(".docx"):
         from docx import Document
