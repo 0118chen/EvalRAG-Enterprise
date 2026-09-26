@@ -1,12 +1,23 @@
 """Celery entrypoint for production document processing."""
 
+import asyncio
 from pathlib import Path
+
 from app.config import get_settings
-from app.core.ingestion import chunk_pages, extract_text
-from app.core.pipeline import default_pipeline
-from app.core.store import SQLiteStore
+from app.core.cache import create_cache
+from app.core.evaluation_runner import EvaluationRunner
+from app.core.ingestion import Chunk, chunk_pages, extract_text
+from app.core.langsmith_eval import LangSmithEvaluationAdapter
+from app.core.llm import create_llm
+from app.core.observability import TraceManager
+from app.core.pipeline import create_ingestion_pipeline
+from app.core.query_rewrite import create_query_rewriter
+from app.core.reranking import create_reranker
+from app.core.retrieval_service import RetrievalService
+from app.core.store import create_store
 
 settings = get_settings()
+traces = TraceManager(settings)
 
 try:
     from celery import Celery
@@ -17,33 +28,111 @@ except ImportError:  # pragma: no cover - dependencies are installed in producti
     celery_app = None
 
 
-def process_document(document_id: str) -> dict[str, str]:
+def process_document(document_id: str, force: bool = False) -> dict[str, str]:
     """Process one persisted upload; Celery retries can safely re-run this task."""
-    store = SQLiteStore()
+    store = create_store(settings.database_url)
     document = store.get_document_any(document_id)
     if not document:
         return {"document_id": document_id, "status": "failed", "stage": "missing"}
-    if document.status == "ready":
+    if document.status == "ready" and not force:
         return {"document_id": document_id, "status": "ready", "stage": "already_indexed", "progress": "100"}
     try:
-        store.update_document_progress(document_id, 20)
-        upload_dir = Path("data/uploads")
-        source = next(upload_dir.glob(f"{document_id}_*"))
-        pages = extract_text(source.name, source.read_bytes())
-        chunks = chunk_pages(document_id, pages)
-        store.update_document_progress(document_id, 60)
-        import asyncio
-        asyncio.run(default_pipeline().index(chunks))
-        with store._lock, store._connect() as connection:
-            connection.executemany("INSERT OR REPLACE INTO chunks VALUES (?, ?, ?, ?, ?)", [(c.id, c.document_id, c.page, c.text, document.knowledge_base_id) for c in chunks])
-        store.update_document_status(document_id, "ready")
-        store.update_document_progress(document_id, 100)
-        return {"document_id": document_id, "status": "ready", "stage": "indexed", "progress": "100"}
+        with traces.span(
+            "ingestion.document",
+            run_type="chain",
+            metadata={
+                "document_id": document_id,
+                "knowledge_base_id": document.knowledge_base_id,
+                "version": document.version,
+            },
+            inputs={"filename": document.filename},
+        ) as document_span:
+            store.update_document_progress(document_id, 20)
+            upload_dir = Path("data/uploads")
+            source = next(upload_dir.glob(f"{document_id}_*"))
+            with traces.span(
+                "ingestion.extract",
+                run_type="tool",
+                metadata={"document_id": document_id},
+            ) as extract_span:
+                pages = extract_text(source.name, source.read_bytes())
+                extract_span.set_outputs({"page_count": len(pages)})
+            with traces.span(
+                "ingestion.chunk",
+                run_type="chain",
+                metadata={"document_id": document_id},
+            ) as chunk_span:
+                chunks = [
+                    Chunk(
+                        id=chunk.id,
+                        document_id=chunk.document_id,
+                        page=chunk.page,
+                        text=chunk.text,
+                        version=document.version,
+                    )
+                    for chunk in chunk_pages(document_id, pages)
+                ]
+                chunk_span.set_outputs({"chunk_count": len(chunks)})
+            store.update_document_progress(document_id, 60)
+            with traces.span(
+                "ingestion.index",
+                run_type="tool",
+                metadata={"document_id": document_id},
+            ) as index_span:
+                asyncio.run(
+                    create_ingestion_pipeline(settings).replace_document(
+                        chunks,
+                        document.knowledge_base_id,
+                        document_id,
+                    )
+                )
+                store.replace_chunks(document_id, document.knowledge_base_id, chunks)
+                index_span.set_outputs({"chunk_count": len(chunks)})
+            store.update_document_status(document_id, "ready")
+            store.update_document_progress(document_id, 100)
+            document_span.set_outputs({"chunk_count": len(chunks), "status": "ready"})
+            return {
+                "document_id": document_id,
+                "status": "ready",
+                "stage": "indexed",
+                "progress": "100",
+            }
     except Exception as exc:
         store.update_document_status(document_id, "failed")
         store.update_document_progress(document_id, 0, str(exc))
         raise
 
 
+def process_evaluation(evaluation_id: str) -> dict[str, str]:
+    store = create_store(settings.database_url)
+    cache = create_cache(settings)
+    retrieval_service = RetrievalService(
+        settings,
+        traces,
+        cache,
+        create_query_rewriter(settings),
+        create_reranker(settings),
+    )
+    runner = EvaluationRunner(
+        settings=settings,
+        store=store,
+        retrieval_service=retrieval_service,
+        traces=traces,
+        langsmith=LangSmithEvaluationAdapter(settings),
+        llm=create_llm(settings),
+    )
+    evaluation = asyncio.run(runner.run(evaluation_id))
+    return {
+        "evaluation_id": evaluation_id,
+        "status": evaluation["status"],
+    }
+
+
 if celery_app is not None:
     process_document = celery_app.task(name="evalrag.process_document", autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})(process_document)
+    process_evaluation = celery_app.task(
+        name="evalrag.process_evaluation",
+        autoretry_for=(Exception,),
+        retry_backoff=True,
+        retry_kwargs={"max_retries": 2},
+    )(process_evaluation)

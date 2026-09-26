@@ -8,6 +8,7 @@ class Chunk:
     document_id: str
     page: int
     text: str
+    version: str = "latest"
 
 
 def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
@@ -39,4 +40,3 @@ def chunk_pages(document_id: str, pages: list[tuple[int, str]], size: int = 800,
                 break
             start = end - overlap
     return chunks
-
