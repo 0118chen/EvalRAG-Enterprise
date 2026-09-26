@@ -15,7 +15,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
-      - run: ruff check app tests alembic
+      - run: ruff check app tests alembic scripts
       - run: pytest -q
 
   frontend:

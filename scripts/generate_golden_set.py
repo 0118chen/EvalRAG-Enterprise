@@ -21,9 +21,9 @@ def parse_json_array(text: str) -> list[dict[str, Any]]:
     end = stripped.rfind("]")
     if start < 0 or end < start:
         raise ValueError("LLM response does not contain a JSON array")
-    payload = json.loads(stripped[start:end + 1])
+    payload = json.loads(stripped[start : end + 1])
     if not isinstance(payload, list):
-        raise ValueError("LLM response is not a JSON array")
+        raise TypeError("LLM response is not a JSON array")
     return payload
 
 
@@ -38,10 +38,7 @@ async def generate_document(
 ) -> list[dict[str, Any]]:
     pages = extract_text(file.name, file.read_bytes())
     page_map = {page: text for page, text in pages}
-    context = "\n\n".join(
-        f"[PAGE {page}]\n{text}"
-        for page, text in pages
-    )
+    context = "\n\n".join(f"[PAGE {page}]\n{text}" for page, text in pages)
     prompt = f"""
 你是金融合规评测集设计员。请依据文档《{file.name}》生成
 {questions_per_document} 道独立、明确、可以用原文直接回答的问题。
@@ -79,11 +76,7 @@ JSON 示例：
         page = int(item.get("page", 0))
         quote = str(item.get("evidence_quote", ""))
         page_text = page_map.get(page, "")
-        if (
-            page not in page_map
-            or not quote
-            or normalize(quote) not in normalize(page_text)
-        ):
+        if page not in page_map or not quote or normalize(quote) not in normalize(page_text):
             continue
         valid.append(
             {
