@@ -212,6 +212,23 @@
 - 仍存在的限制：引文仍是"命中该 chunk"的严格子串判定，未做片段级打分归一；
   LangSmith 同步路径**刻意不上传文档内容**（`redact()` 边界），因此 passage 指标只在本地评测可用。
 
+### 事项十六：让评测平台承载难样本（多跳 / 应拒答）
+
+- 根因：题集要加难样本时，"期望文档"必须是单值且必填的——多跳题的答案分布在两份文件、
+  应拒答题根本没有期望文档，现有标注表达不出来。
+- 设计选择：跳用 JSON 列 `expected_evidence_json`（`[{document_id, page, quote}]`）+ `should_refuse`，
+  `expected_document_id` 变可空；不变量放在 Pydantic `model_validator`（应拒答不许带证据、
+  其余样例至少一个标签、主标签必须与第一跳一致）。
+- 替代方案与取舍：子表 `evaluation_example_targets` 结构更规范，但每次读取多一趟查询、
+  且要迁移全部历史样例；跳是整体读取的载荷，从不按跳过滤，所以 JSON 更合适，
+  代价是 SQL 无法约束形状（由 Pydantic 兜住）。
+- 指标口径变化与兼容性：`recall@k` 变集合命中比例、`page_hit` 要求每个期望 (文档,页) 都在、
+  `passage_hit` 要求每跳引文都命中；单跳样例的数值与改造前逐位相同，靠既有测试守住。
+- 验证：`tests/test_evaluation_multi_hop.py` 7 项（含"部分命中不算成功"与两条校验拒绝路径）；
+  全量 133 passed；`alembic upgrade head` → `0009`，`downgrade -1` 在存在应拒答样本时拒绝执行。
+- 仍存在的限制：应拒答只用"检索是否为空"近似，答案层的拒答正确率未纳入；
+  评测 Runner 尚未支持并发、超时与失败重试（见 P1 条目）。
+
 ## P1：可靠性与安全
 
 - [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
@@ -265,6 +282,24 @@
     （聚合只在标注样例上平均）、`tests/test_evaluation_api.py`（引文经 API 往返并进入指标）。
   - 验证：两处 RED 探针（掐掉存储写入、掐掉 Runner 计算）分别让断言失败；全量 126 passed。
   - 交叉校验：脚本侧独立算一遍引文命中率，与产品指标逐位一致（`passage_cross_check`）。
+- [x] 多跳题与应拒答题的标注结构（migration `0009`）。（2026-09-27 完成）
+  - 结构：`expected_document_id` 变可空；新增 `should_refuse`（布尔）与 `expected_evidence_json`
+    （JSON 数组 `[{document_id, page, quote}]`，多跳每题一跳一个引文）；
+    Pydantic 侧 `EvidenceSpan` + `model_validator`：应拒答不许带证据、其余样例必须至少有一个标签、
+    且 `expected_document_id` 必须与第一跳一致。
+  - 取舍：跳用 JSON 列而不是子表——标注是整体读取、从不 JOIN 或按跳过滤；代价是 SQL 层无法约束形状，
+    改由 Pydantic 兜住。子表的代价是多一张表 + 每次读取两趟查询，收益在当前用法下为零。
+  - 指标语义变化：`recall@k` 从"0/1"变为"期望文档集合中被命中的比例"，
+    新增 `all_targets@k`（全部跳都进 top-k 才算命中）；`page_hit` 变为"每个期望 (文档,页) 都在 top-k 里"；
+    `passage_hit` 要求**每一跳**的引文都命中，`passage_mrr` 按跳取平均。
+    单跳数据集的这些数字与改造前逐位相同（已用既有测试守住）。
+  - 应拒答样例不参与任何检索指标，只记 `retrieved_something` 与聚合的 `negative_retrieved_rate`
+    ——这是检索层的假阳性代理，真正的拒答判定要走答案链路，故刻意不与召回混在一起。
+  - 验证：`pytest` 全量 133 passed（新增 `tests/test_evaluation_multi_hop.py` 7 项）、
+    全新库 `alembic upgrade head` → `0009 (head)`、`downgrade -1` 在有应拒答样本时
+    **拒绝执行**并报出条数（避免静默丢标签）。
+  - 仍存在的限制：应拒答的"该不该拒"目前只由检索是否为空近似，答案层的拒答正确率尚未纳入；
+    多跳的 nDCG 按跳平均，没有做位置重复折扣（多跳 nDCG 本身没有公认口径）。
 - [ ] 评测 Runner 增加有界并发、单样例超时、进度、checkpoint、失败样例重试和取消能力。
 - [ ] 接入标准 Prometheus Histogram/Counter，并覆盖 Cache、Retrieval、Celery、DB Pool 指标。
 - [ ] LangSmith 关闭时将 Trace 持久化到结构化日志、数据库或 OpenTelemetry Collector。

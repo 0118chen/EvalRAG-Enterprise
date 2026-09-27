@@ -236,12 +236,21 @@ BM25+重排在 Recall@1/3/5、MRR、nDCG@3/5、page_hit 上全为 1.000。
 
 ## 7. 下一步
 
-0. **已完成（2026-09-27）**：passage 级指标进入产品——`EvaluationExampleCreate.evidence_quote`
-   → `evaluation_examples.evidence_quote`（migration `0008`）→ Runner 计算
-   `passage_hit`/`passage_at_1`/`passage_mrr` 并逐题记录 `passage_rank`，
-   评测结果因此恢复了区分配置的能力（见 §3 表格）。
+0. **已完成（2026-09-27）**：评测平台现在能承载难样本。
+   - passage 级指标：`EvaluationExampleCreate.evidence_quote`
+     → `evaluation_examples.evidence_quote`（migration `0008`）→ Runner 计算
+     `passage_hit`/`passage_at_1`/`passage_mrr` 并逐题记录 `passage_rank`，
+     评测结果因此恢复了区分配置的能力（见 §3 表格）。
+   - 多跳与应拒答：`expected_document_id` 变可空，新增 `should_refuse` 与 `expected_evidence`
+     （migration `0009`）。指标口径随之扩展：`recall@k` 在多个期望文档上取集合命中比例，
+     另有严格的 `all_targets@k`（每一跳都要进 top-k）；`page_hit` 要求每个期望 (文档,页) 都在；
+     `passage_hit` 要求**每一跳**的引文都命中，`passage_mrr` 按跳取平均。
+     应拒答样例不进任何检索指标，单独报 `negative_retrieved_rate`
+     ——那是检索层的假阳性代理，真正的拒答判定要走答案链路，所以不与召回混在一起。
+     单跳数据集的数字与改造前逐位相同（既有测试守住）。
+   - 降级保护：`downgrade` 遇到多跳/应拒答样本会**拒绝执行**并报出条数，而不是静默丢标签。
 1. 修 `document_version="latest"` 语义（上传指定版本后默认查询命中 0 条，已记在 `docs/priority-fixes.md`）；
 2. 按 F5 三条改造查询路径，并在同一脚本上重测 p50/p95，给出改造前后对照；
 3. 拿到 embedding key 后重跑本脚本，验证 F1 的结论是否随语义向量反转（这才是能写"提升"的前提）；
-4. 按 F3 的两个成因改造题集（不点名法规、同义改写、跨文档多跳、近邻干扰、应拒答负样本），
-   用新的 passage 指标做基线对比。
+4. 按 F3 的两个成因生成 v2 题集（不点名法规、同义改写、跨文档多跳、近邻干扰、应拒答负样本），
+   用 passage 指标与 `all_targets@k` 做 v1/v2 基线对比——**这一步才能回答"BM25 的优势有多少靠词面泄漏"**。

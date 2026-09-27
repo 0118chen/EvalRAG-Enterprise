@@ -28,6 +28,8 @@
   并给出 `latency_ms_p50/p95`（同一排名算多个截断点，避免重跑导致的候选池变化）。
 - 带证据引文的样例额外计算 passage 级指标（`passage_hit`/`passage_at_1`/`passage_mrr` 与每题 `passage_rank`）：
   文档级指标在少量文档上会饱和，passage 级才能看出"答段排在第几"。
+- 支持多跳样例（`expected_evidence`：每题一跳一个引文，另计严格的 `all_targets@k`）与应拒答样例
+  （`should_refuse`：不参与检索指标，单独报 `negative_retrieved_rate`）。
 - Celery 异步执行实验，结果保存到数据库；每条 retrieved 记录带 `chunk_id` 与 `text`，结果可复核。
 - 可选同步 Dataset 到 LangSmith，并使用 LangSmith `evaluate` 执行 Experiment。
 - CLI 支持运行实验和同步 Dataset。
