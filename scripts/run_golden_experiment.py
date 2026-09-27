@@ -19,9 +19,13 @@ import re
 import shutil
 import subprocess
 from datetime import UTC, datetime
+from math import comb
 from pathlib import Path
+from statistics import median
 from typing import Any
 from uuid import uuid4
+
+from scripts.golden_format import GoldenExample, load_golden, resolve_document_ids
 
 ROOT = Path(__file__).resolve().parents[1]
 LAW_DIR = ROOT / "law"
@@ -141,49 +145,113 @@ def index_corpus(document_ids: list[str]) -> None:
             raise SystemExit(f"ingestion failed for {document_id}: {result}")
 
 
-def build_dataset(store, tenant_id: str, kb_id: str, by_filename: dict[str, str], name: str):
-    from app.schemas import EvaluationDataset, EvaluationExample
+def build_dataset(
+    store,
+    tenant_id: str,
+    kb_id: str,
+    by_filename: dict[str, str],
+    name: str,
+    golden_path: Path,
+    description: str,
+):
+    from app.schemas import EvaluationDataset, EvaluationExample, EvidenceSpan
 
-    golden = json.loads(GOLDEN_EVAL.read_text(encoding="utf-8"))
-    missing = sorted({e["source_filename"] for e in golden} - set(by_filename))
-    if missing:
-        raise SystemExit(f"golden set references files that are not in the corpus: {missing}")
+    examples = load_golden(golden_path)
+    resolve_document_ids(examples, by_filename)
     dataset_id = str(uuid4())
+    prepared = []
+    for example in examples:
+        spans = [
+            EvidenceSpan(
+                document_id=by_filename[hop.source_filename],
+                page=hop.page,
+                quote=hop.quote,
+            )
+            for hop in example.hops
+        ]
+        prepared.append(
+            EvaluationExample(
+                id=str(uuid4()),
+                dataset_id=dataset_id,
+                question=example.question,
+                expected_answer=example.expected_answer,
+                # The primary label mirrors the first hop so a v2 example still shows a
+                # document in the dashboard; the metrics read the full span list.
+                expected_document_id=spans[0].document_id if spans else None,
+                expected_page=spans[0].page if spans else None,
+                evidence_quote=spans[0].quote if spans else None,
+                category=example.category,
+                should_refuse=example.should_refuse,
+                evidence_mode=example.mode,
+                expected_evidence=spans,
+            )
+        )
     dataset = EvaluationDataset(
         id=dataset_id,
         tenant_id=tenant_id,
         knowledge_base_id=kb_id,
         name=name,
-        description="52 page-level questions over 13 national rural finance regulations",
-        examples=[
-            EvaluationExample(
-                id=str(uuid4()),
-                dataset_id=dataset_id,
-                question=example["question"],
-                expected_answer=example["expected_answer"],
-                expected_document_id=by_filename[example["source_filename"]],
-                expected_page=example["page"],
-                evidence_quote=example["evidence_quote"],
-                category=example["category"],
-            )
-            for example in golden
-        ],
+        description=description,
+        examples=prepared,
     )
     store.save_evaluation_dataset(dataset)
-    return dataset, {e["question"]: e for e in golden}
+    return dataset, {example.question: example for example in examples}
+
+
+def _probability_all_hops_hit(counts: list[int], total: int, draws: int) -> float:
+    """P(every hop's document is among ``draws`` chunks) by inclusion-exclusion.
+
+    The draws are without replacement from one chunk pool, so the hops are not
+    independent; multiplying their individual hit rates would overstate a random
+    baseline and make the retriever look better than it is.
+    """
+    from itertools import combinations
+
+    probability_missing_some = 0.0
+    for size in range(1, len(counts) + 1):
+        for subset in combinations(counts, size):
+            if sum(subset) > total:
+                continue
+            probability = (
+                comb(total - sum(subset), draws) / comb(total, draws)
+                if total - sum(subset) >= draws
+                else 0.0
+            )
+            probability_missing_some += (-1) ** (size + 1) * probability
+    return max(0.0, 1 - probability_missing_some)
+
+
+def _probability_any_hop_hit(counts: list[int], total: int, draws: int) -> float:
+    """P(at least one hop's document is drawn): the equivalence-question baseline."""
+    from itertools import combinations
+
+    probability_none = 1.0
+    for size in range(1, len(counts) + 1):
+        for subset in combinations(counts, size):
+            if sum(subset) > total:
+                continue
+            probability = (
+                comb(total - sum(subset), draws) / comb(total, draws)
+                if total - sum(subset) >= draws
+                else 0.0
+            )
+            probability_none += (-1) ** size * probability
+    return max(0.0, min(1.0, 1 - probability_none))
 
 
 def random_reference(
-    store, kb_id: str, golden_by_question: dict[str, dict], by_filename: dict[str, str]
+    store,
+    kb_id: str,
+    golden_by_question: dict[str, GoldenExample],
+    by_filename: dict[str, str],
 ) -> dict[str, float]:
     """Document- and page-level hit rates a random 5-chunk draw would reach.
 
     Without this reference a 0.98 Recall@1 on 13 documents is unreadable: the
     interesting question is how much of it is the retriever and how much is the
-    corpus being small.
+    corpus being small. Multi-hop examples get the exact joint probability for their
+    mode, and unanswerable ones are excluded - a random draw cannot succeed or fail them.
     """
-    from math import comb
-
     chunks = store.get_chunks(kb_id, "latest")
     total = len(chunks)
     per_document: dict[str, int] = {}
@@ -194,20 +262,31 @@ def random_reference(
             per_page.get((chunk.document_id, chunk.page), 0) + 1
         )
 
-    def hit(relevant: int) -> float:
-        if relevant <= 0 or total < TOP_K:
-            return 0.0
-        return 1 - comb(total - relevant, TOP_K) / comb(total, TOP_K)
-
-    document_hits = []
-    page_hits = []
+    document_hits: list[float] = []
+    page_hits: list[float] = []
     for example in golden_by_question.values():
-        document_id = by_filename[example["source_filename"]]
-        document_hits.append(hit(per_document.get(document_id, 0)))
-        page_hits.append(hit(per_page.get((document_id, example["page"]), 0)))
+        if example.should_refuse or not example.hops:
+            continue
+        document_counts = [
+            per_document.get(by_filename[hop.source_filename], 0) for hop in example.hops
+        ]
+        page_counts = [
+            per_page.get((by_filename[hop.source_filename], hop.page), 0)
+            for hop in example.hops
+        ]
+        if total < TOP_K:
+            document_hits.append(0.0)
+            page_hits.append(0.0)
+            continue
+        if example.mode == "any":
+            document_hits.append(_probability_any_hop_hit(document_counts, total, TOP_K))
+            page_hits.append(_probability_any_hop_hit(page_counts, total, TOP_K))
+        else:
+            document_hits.append(_probability_all_hops_hit(document_counts, total, TOP_K))
+            page_hits.append(_probability_all_hops_hit(page_counts, total, TOP_K))
     return {
-        "random_document_hit_at_5": sum(document_hits) / len(document_hits),
-        "random_page_hit_at_5": sum(page_hits) / len(page_hits),
+        "random_document_hit_at_5": sum(document_hits) / max(len(document_hits), 1),
+        "random_page_hit_at_5": sum(page_hits) / max(len(page_hits), 1),
         "chunks_per_document": round(total / max(len(per_document), 1), 1),
     }
 
@@ -250,7 +329,16 @@ def run_config(
     return evaluation["results"]
 
 
-def per_example(results: dict, golden_by_question: dict[str, dict]) -> list[dict]:
+def _quote_found(example: GoldenExample, retrieved: list[dict]) -> bool:
+    """Does the retrieved list hold the answering passage(s) under this example's mode?"""
+    texts = [normalize(chunk.get("text", "")) for chunk in retrieved]
+    hits = [any(normalize(quote) in text for text in texts) for quote in example.quotes]
+    if not hits:
+        return False
+    return any(hits) if example.mode == "any" else all(hits)
+
+
+def per_example(results: dict, golden_by_question: dict[str, GoldenExample]) -> list[dict]:
     """Per-question rows, so a headline number can be traced back to its questions.
 
     Chunk text stays out of here on purpose: the point is to make claims checkable
@@ -259,19 +347,29 @@ def per_example(results: dict, golden_by_question: dict[str, dict]) -> list[dict
     rows = []
     for item in results["examples"]:
         golden = golden_by_question[item["question"]]
-        quote = normalize(golden["evidence_quote"])
         retrieved = item["retrieved"]
         rows.append(
             {
                 "question": item["question"],
                 "category": item["category"],
-                "source_filename": golden["source_filename"],
+                "source_filename": (
+                    golden.hops[0].source_filename if golden.hops else None
+                ),
+                "source_filenames": list(golden.source_filenames),
+                "evidence_mode": golden.mode,
+                "should_refuse": golden.should_refuse,
                 "expected_page": item["expected_page"],
                 "recall_at_1": item["metrics"].get("recall_at_1"),
+                "recall_at_3": item["metrics"].get("recall_at_3"),
                 "recall_at_5": item["metrics"].get("recall_at_5"),
+                "all_targets_at_5": item["metrics"].get("all_targets_at_5"),
+                "any_target_at_5": item["metrics"].get("any_target_at_5"),
                 "page_hit": item["metrics"].get("page_hit"),
-                "quote_hit": any(quote in normalize(chunk.get("text", "")) for chunk in retrieved),
+                "retrieved_something": item["metrics"].get("retrieved_something"),
+                "quote_hit": _quote_found(golden, retrieved),
                 "passage_rank": item.get("passage_rank"),
+                "passage_ranks": item.get("passage_ranks"),
+                "top_score": round(max((c["score"] for c in retrieved), default=0.0), 4),
                 "latency_ms": round(item["latency_ms"], 1),
                 "retrieved": [
                     {
@@ -286,45 +384,68 @@ def per_example(results: dict, golden_by_question: dict[str, dict]) -> list[dict
     return rows
 
 
-def evidence_stats(results: dict, golden_by_question: dict[str, dict]) -> dict[str, float]:
+def evidence_stats(results: dict, golden_by_question: dict[str, GoldenExample]) -> dict[str, float]:
     """A retrieved chunk containing the ground-truth quote is the passage that answers it.
 
     Deliberately re-implemented here rather than read from the evaluation results: the
     product reports its own passage metrics, and two independent computations agreeing
     is the cheapest available check that neither is wrong.
     """
+    answerable = refusal_found = refusal_total = 0
     exact = 0
-    on_page = 0
     for item in results["examples"]:
-        quote = normalize(golden_by_question[item["question"]]["evidence_quote"])
-        retrieved = item["retrieved"]
-        if any(quote in normalize(chunk.get("text", "")) for chunk in retrieved):
+        golden = golden_by_question[item["question"]]
+        if golden.should_refuse:
+            refusal_total += 1
+            refusal_found += int(bool(item["retrieved"]))
+            continue
+        answerable += 1
+        if _quote_found(golden, item["retrieved"]):
             exact += 1
-        if any(
-            chunk["document_id"] == item["expected_document_id"]
-            and chunk["page"] == item["expected_page"]
-            for chunk in retrieved
-        ):
-            on_page += 1
-    total = len(results["examples"])
-    return {
-        "evidence_quote_hit_rate": exact / total,
-        "expected_page_retrieved_rate": on_page / total,
+    stats = {
+        "evidence_quote_hit_rate": exact / max(answerable, 1),
+        "answerable_examples": answerable,
     }
+    if refusal_total:
+        stats["negative_retrieved_rate"] = refusal_found / refusal_total
+        stats["refusal_examples"] = refusal_total
+    return stats
 
 
-def category_table(
-    results: dict, golden_by_question: dict[str, dict]
-) -> dict[str, dict[str, float]]:
+def category_table(rows: list[dict]) -> dict[str, dict[str, float]]:
+    """Per-category averages, with the refusal examples kept out of them.
+
+    A question that has no answer in the corpus has no recall to average: folding it in
+    would drag every category down and report a failure that did not happen. It gets its
+    own row carrying only the signals that do mean something for it (whether anything was
+    retrieved, and how high the top score went).
+    """
     buckets: dict[str, list[dict]] = {}
-    for item in results["examples"]:
-        buckets.setdefault(item["category"], []).append(item)
-    table = {}
+    refusals: list[dict] = []
+    for row in rows:
+        if row["should_refuse"]:
+            refusals.append(row)
+            continue
+        buckets.setdefault(row["category"], []).append(row)
+    table: dict[str, dict[str, float]] = {}
     for category, items in sorted(buckets.items()):
         table[category] = {
             "examples": len(items),
-            "recall_at_3": sum(i["metrics"].get("recall_at_3", 0.0) for i in items) / len(items),
-            "page_hit": sum(i["metrics"].get("page_hit", 0.0) for i in items) / len(items),
+            "recall_at_3": sum(i["recall_at_3"] or 0.0 for i in items) / len(items),
+            "page_hit": sum(i["page_hit"] or 0.0 for i in items) / len(items),
+            "quote_hit": sum(1.0 for i in items if i["quote_hit"]) / len(items),
+        }
+    if refusals:
+        scores = sorted(i["top_score"] for i in refusals if i["top_score"] is not None)
+        table["应拒答"] = {
+            "examples": len(refusals),
+            "recall_at_3": None,
+            "page_hit": None,
+            "quote_hit": None,
+            "retrieved_rate": sum(1.0 for i in refusals if i["retrieved"]) / len(refusals),
+            # statistics.median, not the middle element: with an even count the middle
+            # element is the *upper* median and quietly overstates the score.
+            "top_score_median": median(scores) if scores else None,
         }
     return table
 
@@ -337,7 +458,14 @@ def main() -> None:
     parser.add_argument("--json", type=Path, default=None)
     parser.add_argument("--markdown", type=Path, default=None)
     parser.add_argument("--keep-database", action="store_true")
+    parser.add_argument(
+        "--golden",
+        type=Path,
+        default=GOLDEN_EVAL,
+        help="golden set to score: v1 (flat) or v2 (multi-hop, equivalence, refusals)",
+    )
     args = parser.parse_args()
+    golden_path = args.golden if args.golden.is_absolute() else ROOT / args.golden
 
     database = ROOT / args.database
     if database.exists() and not args.keep_database:
@@ -369,7 +497,13 @@ def main() -> None:
     print(f"indexed {chunk_count} chunks across {len(by_filename)} documents")
 
     dataset, golden_by_question = build_dataset(
-        store, args.tenant, kb_id, by_filename, f"{args.knowledge_base}-golden"
+        store,
+        args.tenant,
+        kb_id,
+        by_filename,
+        f"{args.knowledge_base}-golden",
+        golden_path,
+        f"{len(load_golden(golden_path))} questions from {golden_path.name}",
     )
     print(f"dataset {dataset.name}: {len(dataset.examples)} examples\n")
 
@@ -405,13 +539,15 @@ def main() -> None:
             "per_example": per_example(results, golden_by_question),
         }
         configs.append(entry)
-        last_results, last_config = results, config
+        last_results, last_config = results, entry
         metrics = results["metrics"]
         print(
             f"{config['name']:32} R@1={metrics.get('recall_at_1', 0):.3f} "
             f"R@3={metrics.get('recall_at_3', 0):.3f} R@5={metrics.get('recall_at_5', 0):.3f} "
             f"MRR={metrics.get('mrr', 0):.3f} nDCG@3={metrics.get('ndcg_at_3', 0):.3f} "
             f"page={metrics.get('page_hit', 0):.3f} passage@1={metrics.get('passage_at_1', 0):.3f} "
+            f"all@5={metrics.get('all_targets_at_5', 0):.3f} "
+            f"any@5={metrics.get('any_target_at_5', 0):.3f} "
             f"quote={entry['evidence_quote_hit_rate']:.3f} "
             f"p50={metrics.get('latency_ms_p50', 0):.1f}ms"
         )
@@ -427,7 +563,11 @@ def main() -> None:
         "dataset": {
             "name": dataset.name,
             "examples": len(dataset.examples),
-            "source": str(GOLDEN_EVAL.relative_to(ROOT)),
+            "source": (
+                str(golden_path.relative_to(ROOT))
+                if golden_path.is_relative_to(ROOT)
+                else str(golden_path)
+            ),
             "top_k": TOP_K,
         },
         "embedding": {
@@ -439,7 +579,7 @@ def main() -> None:
         "configs": configs,
         "reference": random_reference(store, kb_id, golden_by_question, by_filename),
         "by_category": (
-            {last_config["name"]: category_table(last_results, golden_by_question)}
+            {last_config["name"]: category_table(last_config["per_example"])}
             if last_results and last_config
             else {}
         ),
@@ -466,6 +606,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         ("page_hit", "page_hit"),
         ("passage@1", "passage_at_1"),
         ("passage_mrr", "passage_mrr"),
+        ("all@5", "all_targets_at_5"),
+        ("any@5", "any_target_at_5"),
+        ("neg_retrieved", "negative_retrieved_rate"),
         ("quote_hit", "evidence_quote_hit_rate"),
         ("p50 ms", "latency_ms_p50"),
         ("p95 ms", "latency_ms_p95"),
@@ -504,13 +647,23 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Per category (product default configuration)",
         "",
-        "| category | examples | Recall@3 | page_hit |",
-        "|---|---|---|---|",
+        "| category | examples | Recall@3 | page_hit | quote_hit | notes |",
+        "|---|---|---|---|---|---|",
     ]
     for table in report["by_category"].values():
         for category, row in table.items():
+            values = [
+                "—" if row.get(key) is None else f"{row[key]:.3f}"
+                for key in ("recall_at_3", "page_hit", "quote_hit")
+            ]
+            note = ""
+            if row.get("top_score_median") is not None:
+                note = (
+                    f"无检索指标；检索到内容的比例 {row['retrieved_rate']:.3f}，"
+                    f"top 分数中位数 {row['top_score_median']:.1f}"
+                )
             lines.append(
-                f"| {category} | {row['examples']} | {row['recall_at_3']:.3f} | {row['page_hit']:.3f} |"
+                f"| {category} | {row['examples']} | " + " | ".join(values) + f" | {note} |"
             )
     lines.append("")
     return "\n".join(lines)

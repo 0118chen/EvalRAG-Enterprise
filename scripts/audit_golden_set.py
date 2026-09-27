@@ -191,6 +191,127 @@ def audit() -> dict[str, Any]:
     return report
 
 
+def bigram_overlap(question: str, quote: str) -> float:
+    """Share of the question's character bigrams that also occur in the answer sentence.
+
+    A retriever that only matches words gets its lift from this overlap, so it measures how
+    much of the wording the question already hands over. v1 leaked through the regulation
+    name; v2 forbids it, and this is the number that shows the difference without a model.
+    """
+    def bigrams(text: str) -> set[str]:
+        collapsed = normalize(text)
+        return {collapsed[index : index + 2] for index in range(len(collapsed) - 1)}
+
+    question_bigrams = bigrams(question)
+    if not question_bigrams:
+        return 0.0
+    return len(question_bigrams & bigrams(quote)) / len(question_bigrams)
+
+
+def audit_v2(path: Path, corpus: dict[str, list[tuple[int, str]]], v1: Path) -> dict[str, Any]:
+    """Audit the extended set: every hop must hold, and no question may name a document."""
+    from scripts.generate_golden_set_v2 import document_titles, mentions_a_title
+    from scripts.golden_format import load_golden
+
+    titles = document_titles(sorted(LAW_DIR.glob("*.*")))
+    examples = load_golden(path)
+    previous = load_golden(v1)
+
+    quote_missing: list[dict[str, Any]] = []
+    page_mismatch: list[dict[str, Any]] = []
+    leaks: list[dict[str, Any]] = []
+    hop_total = 0
+    hop_verified = 0
+    for example in examples:
+        leak = mentions_a_title(example.question, titles)
+        if leak:
+            leaks.append({"question": example.question, "leaked": leak})
+        for hop in example.hops:
+            hop_total += 1
+            page_text = {
+                page: normalize(text) for page, text in corpus.get(hop.source_filename, [])
+            }
+            needle = normalize(hop.quote)
+            containing = [page for page, text in page_text.items() if needle in text]
+            if not containing:
+                quote_missing.append(
+                    {"question": example.question, "source": hop.source_filename}
+                )
+            elif hop.page not in containing:
+                page_mismatch.append(
+                    {
+                        "question": example.question,
+                        "claimed_page": hop.page,
+                        "quote_found_on": containing,
+                    }
+                )
+            else:
+                hop_verified += 1
+
+    def overlaps(items) -> dict[str, float]:
+        values = sorted(
+            bigram_overlap(example.question, example.quotes[0])
+            for example in items
+            if example.hops
+        )
+        if not values:
+            return {}
+        return {
+            "median": values[len(values) // 2],
+            "p90": values[int(len(values) * 0.9)],
+            "max": values[-1],
+        }
+
+    return {
+        "example_count": len(examples),
+        "categories": dict(collections.Counter(e.category for e in examples)),
+        "modes": dict(collections.Counter(e.mode for e in examples if not e.should_refuse)),
+        "refusal_examples": sum(1 for e in examples if e.should_refuse),
+        "examples_with_multiple_hops": sum(1 for e in examples if len(e.hops) > 1),
+        "hops": {"total": hop_total, "quote_on_claimed_page": hop_verified},
+        "quote_not_found_in_source": quote_missing,
+        "quote_on_a_different_page": page_mismatch,
+        "questions_naming_a_document": leaks,
+        "wording_overlap_with_answer_sentence": {
+            "v2": overlaps(examples),
+            "v1": overlaps(previous),
+        },
+        "pages_out_of_range": [
+            {
+                "question": example.question,
+                "source": hop.source_filename,
+                "claimed_page": hop.page,
+                "pages_in_file": len(corpus[hop.source_filename]),
+            }
+            for example in examples
+            for hop in example.hops
+            if hop.source_filename in corpus
+            and hop.page is not None
+            and hop.page > len(corpus[hop.source_filename])
+        ],
+    }
+
+
+def print_v2_report(report: dict[str, Any]) -> None:
+    print("\n[E] v2 golden set")
+    print(f"  examples: {report['example_count']}  refusals: {report['refusal_examples']}")
+    print(f"  categories: {report['categories']}")
+    print(f"  evidence modes: {report['modes']}")
+    print(f"  examples with more than one hop: {report['examples_with_multiple_hops']}")
+    hops = report["hops"]
+    print(f"  hops verified (quote on claimed page): {hops['quote_on_claimed_page']}/{hops['total']}")
+    for key in ("quote_not_found_in_source", "quote_on_a_different_page", "pages_out_of_range"):
+        print(f"  {key}: {len(report[key])}")
+        for item in report[key][:5]:
+            print(f"      - {item}")
+    print(f"  questions naming a document: {len(report['questions_naming_a_document'])}")
+    for item in report["questions_naming_a_document"][:5]:
+        print(f"      - {item}")
+    overlap = report["wording_overlap_with_answer_sentence"]
+    print(f"  wording overlap with the answer sentence (v1): {overlap['v1']}")
+    print(f"  wording overlap with the answer sentence (v2): {overlap['v2']}")
+
+
 def print_report(report: dict[str, Any]) -> None:
     structure = report["structure"]
     print(f"examples: {report['example_count']}   corpus documents: {report['corpus_documents']}")
@@ -239,9 +360,15 @@ def print_report(report: dict[str, Any]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", type=Path, default=None)
+    parser.add_argument("--v2", type=Path, default=LAW_DIR / "golden_eval_v2.json")
     args = parser.parse_args()
     report = audit()
+    corpus = load_corpus()
+    if args.v2.exists():
+        report["v2"] = audit_v2(args.v2, corpus, GOLDEN)
     print_report(report)
+    if "v2" in report:
+        print_v2_report(report["v2"])
     if args.json:
         args.json.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\nwrote {args.json}")
