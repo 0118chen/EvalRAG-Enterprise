@@ -204,5 +204,40 @@
     "answer_disagreements": [],
     "document_ids_known": 52,
     "document_ids_total": 52
+  },
+  "v2": {
+    "example_count": 75,
+    "categories": {
+      "同义改写": 52,
+      "多跳": 9,
+      "等价多标签": 6,
+      "应拒答": 8
+    },
+    "modes": {
+      "all": 61,
+      "any": 6
+    },
+    "refusal_examples": 8,
+    "examples_with_multiple_hops": 15,
+    "hops": {
+      "total": 87,
+      "quote_on_claimed_page": 87
+    },
+    "quote_not_found_in_source": [],
+    "quote_on_a_different_page": [],
+    "questions_naming_a_document": [],
+    "wording_overlap_with_answer_sentence": {
+      "v2": {
+        "median": 0.3333333333333333,
+        "p90": 0.7142857142857143,
+        "max": 0.78125
+      },
+      "v1": {
+        "median": 0.42857142857142855,
+        "p90": 0.6111111111111112,
+        "max": 0.8095238095238095
+      }
+    },
+    "pages_out_of_range": []
   }
 }
