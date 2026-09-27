@@ -394,6 +394,11 @@ progress {
   background: #f8e1df;
 }
 
+.status.needs_ocr {
+  color: #6b4a86;
+  background: #ece2f4;
+}
+
 .row-actions {
   width: 52px;
   text-align: right;

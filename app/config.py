@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     retrieval_candidate_multiplier: int = 4
     evaluation_inline_fallback: bool = False
     max_upload_mb: int = 50
+    ocr_backend: str = "none"
+    ocr_command: str = "tesseract"
+    ocr_language: str = "chi_sim+eng"
+    ocr_max_pages: int = 20
     health_checks_public: bool = False
     health_admin_token: str | None = None
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

@@ -316,9 +316,9 @@
 |---|---|---|
 | `.html` / `.htm` | **支持**（2026-09-27 完成） | 地方性法规、司法解释常常只以网页发布；标准库 `html.parser` 就够，不新增依赖 |
 | `.xlsx` | **支持**（2026-09-27 完成） | 真正的问题是分块策略：按字符切会把表格压平，数字找不到列名 |
-| `.xls` | **不做**（本次入库的那份在管线外一次性转成 `.xlsx`） | `xlrd` 只读且已停止维护，同 `.doc`：老格式让上传方另存更划算 |
+| `.xls` | **不做** | `xlrd` 只读且已停止维护，同 `.doc`：老格式让上传方另存更划算 |
 | `.doc` | **不做** | 需要 `antiword`/LibreOffice 这类外部二进制，或维护成本更高的纯 Python 解析；收益仅是"多认一个后缀"，却把外部二进制带进镜像，影响可复现性与部署体积。正确做法是让上传方另存为 `.docx` |
-| 图片 / 扫描件 | **不装 OCR 引擎，只做接口与状态** | Tesseract/PaddleOCR 要系统二进制和 GB 级镜像；做成可插拔后端 + `needs_ocr` 状态能拿到绝大部分设计收益，而不把 demo 稳定性押上去 |
+| 图片 / 扫描件 | **不装 OCR 引擎，只做接口与状态**（2026-09-27 完成） | Tesseract/PaddleOCR 要系统二进制和 GB 级镜像；做成可插拔后端 + `needs_ocr` 状态能拿到绝大部分设计收益，而不把 demo 稳定性押上去 |
 
 - 验证与实测（HTML，用自己的 3 份真实政府网页跑抽取链路）：
 
@@ -368,6 +368,26 @@
   公式按缓存值读取（用程序生成、从未被 Excel 打开过的文件可能取到空值）；
   workbook 整体读入内存（大表需要上限）；`.xls` 与 `.doc` 一律拒收。
 
+- OCR 的设计选择（`needs_ocr` 路由）：新增 `app/core/ocr.py`，把 OCR 定义成 `OcrBackend` 协议 +
+  `create_ocr_backend(settings)`，配置为默认值 `OCR_BACKEND=none` 时返回 `None`（不引入任何系统依赖）。
+  `TesseractBackend` 用 pymupdf 把每页渲染成 PNG，再调 `tesseract <png> stdout -l chi_sim+eng` 取文字，
+  **不需要 pytesseract 之类的 Python 包**，只需二进制 + 中文语言包。Worker 在"抽出 0 字符"时区分三种情况：
+  没配后端 / 后端不可用（`OcrUnavailableError`）/ OCR 跑完也没文字，三者都落到 `needs_ocr` 状态并把原因
+  写进 `error_message`，而不是笼统地 `failed`——文件是好的，缺的是这个部署的 OCR 能力。
+  异常类型上 `NeedsOcrError` 继承 `EmptyExtractionError`（语义仍是"没抽到文字"），两者都不进自动重试。
+- 一个容易漏掉的连带改动：前端 `pollDocument` 原来只把 `ready`/`failed` 当终态，新增 `needs_ocr`
+  之后必须同步，否则扫描件会让前端一直轮询；样式里也补了 `.status.needs_ocr`。
+- 新增测试：`tests/test_tasks.py` 5 例（无后端 → `needs_ocr`、配了后端 → 文字入库且状态 `ready`、
+  引擎不可用 → `needs_ocr`、OCR 无产出 → `needs_ocr`、`NeedsOcrError` 不进自动重试）；
+  `tests/test_ocr.py` 5 例（默认不建后端、tesseract 参数来自配置、未知后端名报错、
+  二进制缺失报 `OcrUnavailableError` 而不是崩掉在 FileNotFoundError、非 PDF 输入被拒）。
+  诚实标注：worker 的 5 例是 `AttributeError` 型 RED（新异常/新函数尚不存在）；
+  `test_ocr.py` 的 5 例与实现同时诞生，属于契约测试，不是 RED 验证。
+- 仍存在的限制：**没有安装 tesseract，也没有用真实扫描件跑过端到端 OCR**——这条链路只在假后端上
+  验证过契约；OCR 质量（中文识别率、超过 `OCR_MAX_PAGES` 后的行为、倾斜/低分辨率页的预处理）
+  完全没测；`needs_ocr` 目前没有"配置好引擎后重投"的入口，只能重新上传或 `reindex-document --force`；
+  `TesseractBackend` 只渲染 PDF（图片上传仍在上传层被 400 拒收）。
+
 ## P1：可靠性与安全
 
 - [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
@@ -379,9 +399,11 @@
 
 - [x] 上传改为分块流式写入，在读取过程中执行大小限制。（2026-09-27 完成）
 - [x] 无文字层文件（扫描件）不再静默变成"ready 但 0 chunk"。（2026-09-27 完成，见事项十八）
-- [ ] 支持扫描件：在 Worker 内接入 OCR（Tesseract/PaddleOCR），或把无文字层文档转入人工处理队列。
-- [ ] 表格类文件（`.xls`/`.xlsx`）：需要行级序列化 + 每个 chunk 重复表头，否则数字找不到所属列名；
-      实测一份 54×6 的补贴测算表按换行分块后切成 3 个 chunk，列语义丢失。依赖上也缺 `openpyxl`/`xlrd`。
+- [x] 无文字层文档路由到 `needs_ocr`，并留出可插拔 OCR 后端接口。（2026-09-27 完成，见事项二十）
+- [ ] 在镜像里安装 OCR 引擎（tesseract + `tesseract-ocr-chi-sim`）并用真实扫描件做端到端验证；
+      给 `needs_ocr` 文档提供"配好引擎后重投"的入口（现在只能重新上传或 `reindex --force`）。
+- [x] 表格类文件（`.xlsx`）行级序列化 + 每行重复列名，避免数字与列名分家。（2026-09-27 完成，见事项二十）
+      实测一份 54×6 的补贴测算表：压平后 39.1% 的取值所在 chunk 找不到自己的列名，行级自描述后 0.0%。
 - [ ] 校验文件 magic/MIME，并为 PDF/DOCX 解析设置超时、内存限制和任务 time limit。
 - [ ] 建立租户存储配额与原始文件清理/归档策略。
 - [x] Celery 使用原子状态迁移或分布式锁，防止两个 Worker 同时处理同一文档。（2026-09-27 完成）

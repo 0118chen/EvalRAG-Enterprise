@@ -184,7 +184,7 @@ async function pollDocument(id: string) {
     const document = await api.document(tenantId.value, id)
     const index = documents.value.findIndex((item) => item.id === id)
     if (index >= 0) documents.value[index] = document
-    if (document.status === 'ready' || document.status === 'failed') return
+    if (document.status === 'ready' || document.status === 'failed' || document.status === 'needs_ocr') return
     await new Promise((resolve) => setTimeout(resolve, 1000))
   }
 }

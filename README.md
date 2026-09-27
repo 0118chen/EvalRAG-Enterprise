@@ -117,9 +117,9 @@ curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 | `.txt` / `.md` | 先按 UTF-8 解码（带 BOM 时去掉 BOM），失败再按 GB18030/GBK 解码；两者都不是时带替换字符解码，而不是让整个文档失败 |
 | 其他（`.doc`、`.xls`、图片等） | 上传时按扩展名直接返回 400 |
 
-白名单之外的类型被拒是因为它们各自需要额外依赖或专门的分块策略。**明确不做 `.doc`（老二进制 Word）**：读它要 `antiword` 或 LibreOffice 这类外部二进制，或者维护成本更高的纯 Python 解析，收益只是"多认一个后缀"，而正确做法是让上传方另存为 `.docx`；`.xls` 同理（`xlrd` 只读且已停止维护），本次入库的民航局 `.xls` 是在管线外一次性转成 `.xlsx` 的；图片需要 OCR 引擎，在拿到 OCR 之前不做。决策记录见 `docs/priority-fixes.md` 事项二十。**这条白名单只看扩展名**，所以下面这种情况能通过上传检查：
+白名单之外的类型被拒是因为它们各自需要额外依赖或专门的分块策略。**明确不做 `.doc`（老二进制 Word）**：读它要 `antiword` 或 LibreOffice 这类外部二进制，或者维护成本更高的纯 Python 解析，收益只是"多认一个后缀"，而正确做法是让上传方另存为 `.docx`；`.xls` 同理（`xlrd` 只读且已停止维护），入库前统一要求 `.xlsx`；图片需要 OCR 引擎，未配置 OCR 时会被标为 `needs_ocr` 而不是假装成功。决策记录见 `docs/priority-fixes.md` 事项二十。**这条白名单只看扩展名**，所以下面这种情况能通过上传检查：
 
-扫描件或无文字层的 PDF：`extract_text` 会抽出 0 个字符，Worker 在抽取后立即检查可提取字符数，为 0 时抛 `EmptyExtractionError` 并把文档置为 `failed`，附原因 `N page(s), 0 extractable characters - likely a scanned document without a text layer (OCR required)`，`chunks=0`、不上报成功进度、不写任何索引；`GET /api/v1/documents/{id}` 返回该原因。该异常不参与 Celery 自动重试（任务注册里列为 `dont_autoretry_for`），因为"这份文件没有文字层"是文件的稳定属性，重试三次只是把同一个失败重复三遍。
+扫描件或无文字层的 PDF：`extract_text` 抽出 0 个字符时，Worker 先尝试 OCR 后端。配了 `OCR_BACKEND=tesseract`（可选 `OCR_LANGUAGE=chi_sim+eng`、`OCR_MAX_PAGES`）就渲染页面并调用 `tesseract` 取文字，成功则照常分块入库，Trace 里多一个 `ingestion.ocr` span；没配、二进制不存在、或 OCR 也取不到文字时，文档状态置为 **`needs_ocr`** 而不是 `failed` —— 文件本身没问题，缺的是这个部署的 OCR 能力。失败原因会写清是"没有配置后端（`set OCR_BACKEND=tesseract to read scans`）"、"引擎不可用（`ocr backend 'tesseract' unavailable: tesseract binary not found`）"还是"OCR 运行了但没取到文字"，`GET /api/v1/documents/{id}` 直接可见，前端轮询也把 `needs_ocr` 当作终态。这两种异常都不参与 Celery 自动重试（`dont_autoretry_for`），因为它们都不是瞬时故障。OCR 后端默认关闭，`none` 时不引入任何系统依赖。
 
 ## 本地开发
 

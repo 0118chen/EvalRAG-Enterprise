@@ -4,6 +4,7 @@ import pytest
 
 from app import tasks
 from app.core.embeddings import HashEmbedding
+from app.core.ocr import OcrUnavailableError
 from app.core.pipeline import IngestionPipeline
 from app.core.store import SQLiteStore
 from app.db.models import utc_now
@@ -198,7 +199,7 @@ def test_external_index_failure_keeps_document_failed_and_db_unchanged(
     assert store.get_chunks(KB, VERSION) == []
 
 
-def test_scanned_file_without_a_text_layer_fails_instead_of_indexing_nothing(
+def test_a_scanned_file_is_not_indexed_and_is_reported_as_needing_ocr(
     tmp_path, monkeypatch
 ) -> None:
     """A scan passes the upload extension check but extracts to nothing.
@@ -211,15 +212,18 @@ def test_scanned_file_without_a_text_layer_fails_instead_of_indexing_nothing(
     monkeypatch.setattr(
         tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
     )
+    monkeypatch.setattr(tasks, "create_ocr_backend", lambda settings: None)
     _replace_upload(tmp_path, "scan.pdf", _blank_page_pdf())
 
     with pytest.raises(tasks.EmptyExtractionError):
         _run(DOC)
 
+    # The category stays "nothing was extracted"; the status says who can fix it.
+    assert issubclass(tasks.NeedsOcrError, tasks.EmptyExtractionError)
     document = store.get_document_any(DOC)
     assert document is not None
-    assert document.status == "failed"
-    assert "characters" in (document.error_message or "")
+    assert document.status == "needs_ocr"
+    assert "0 extractable characters" in (document.error_message or "")
     assert store.get_chunks(KB, VERSION) == []
     # Nothing was indexed anywhere, and no progress was reported for a success path.
     assert dense.calls == []
@@ -251,3 +255,97 @@ def test_a_partly_machine_readable_document_is_still_indexed(
     assert document is not None
     assert document.status == "ready"
     assert len(store.get_chunks(KB, VERSION)) == 1
+
+
+class FakeOcr:
+    """An OCR backend that returns whatever the test tells it to."""
+
+    def __init__(self, pages: list[str] | None = None, error: Exception | None = None) -> None:
+        self.pages = pages or []
+        self.error = error
+        self.calls: list[str] = []
+
+    def extract(self, filename: str, payload: bytes) -> list[tuple[int, str]]:
+        self.calls.append(filename)
+        if self.error is not None:
+            raise self.error
+        return list(enumerate(self.pages, start=1))
+
+
+def test_a_scan_without_an_ocr_backend_asks_for_one_instead_of_failing(
+    tmp_path, monkeypatch
+) -> None:
+    """Failing is for files nothing can read; a scan with no engine configured is
+    a deployment gap, and the status should send someone to fix it."""
+    store = _seed(tmp_path, monkeypatch)
+    monkeypatch.setattr(tasks, "create_ocr_backend", lambda settings: None)
+    _replace_upload(tmp_path, "scan.pdf", _blank_page_pdf())
+
+    with pytest.raises(tasks.NeedsOcrError):
+        _run(DOC)
+
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "needs_ocr"
+    assert "OCR_BACKEND" in (document.error_message or "")
+    assert store.get_chunks(KB, VERSION) == []
+
+
+def test_ocr_text_is_indexed_when_a_backend_is_configured(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch)
+    dense, sparse = RecordingIndexer(), RecordingIndexer()
+    monkeypatch.setattr(
+        tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
+    )
+    backend = FakeOcr(["第一条 扫描件上的文字应当进入索引。"])
+    monkeypatch.setattr(tasks, "create_ocr_backend", lambda settings: backend)
+    _replace_upload(tmp_path, "scan.pdf", _blank_page_pdf())
+
+    result = _run(DOC)
+
+    assert result["status"] == "ready"
+    assert result["stage"] == "indexed"
+    # The worker hands the backend the uploaded file, by the name it stores it under.
+    assert backend.calls and backend.calls[0].endswith("scan.pdf")
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "ready"
+    chunks = store.get_chunks(KB, VERSION)
+    assert chunks and "扫描件上的文字" in chunks[0].text
+    assert dense.calls and sparse.calls
+
+
+def test_an_unavailable_engine_sends_the_document_to_a_human(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch)
+    backend = FakeOcr(error=OcrUnavailableError("tesseract binary not found: tesseract"))
+    monkeypatch.setattr(tasks, "create_ocr_backend", lambda settings: backend)
+    _replace_upload(tmp_path, "scan.pdf", _blank_page_pdf())
+
+    with pytest.raises(tasks.NeedsOcrError):
+        _run(DOC)
+
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "needs_ocr"
+    assert "tesseract binary not found" in (document.error_message or "")
+
+
+def test_ocr_that_finds_nothing_also_needs_a_human(tmp_path, monkeypatch) -> None:
+    store = _seed(tmp_path, monkeypatch)
+    backend = FakeOcr(["   "])
+    monkeypatch.setattr(tasks, "create_ocr_backend", lambda settings: backend)
+    _replace_upload(tmp_path, "scan.pdf", _blank_page_pdf())
+
+    with pytest.raises(tasks.NeedsOcrError):
+        _run(DOC)
+
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "needs_ocr"
+    assert "no text" in (document.error_message or "")
+
+
+def test_needs_ocr_is_not_retried_by_the_queue() -> None:
+    if tasks.celery_app is None:
+        pytest.skip("celery is not installed in this environment")
+    assert tasks.NeedsOcrError in tuple(tasks.process_document.dont_autoretry_for)

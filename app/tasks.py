@@ -10,6 +10,7 @@ from app.core.ingestion import Chunk, chunk_pages, extract_text
 from app.core.langsmith_eval import LangSmithEvaluationAdapter
 from app.core.llm import create_llm
 from app.core.observability import TraceManager
+from app.core.ocr import OcrUnavailableError, create_ocr_backend
 from app.core.pipeline import create_ingestion_pipeline
 from app.core.query_rewrite import create_query_rewriter
 from app.core.reranking import create_reranker
@@ -30,6 +31,42 @@ except ImportError:  # pragma: no cover - dependencies are installed in producti
 
 class EmptyExtractionError(RuntimeError):
     """The file passed the upload check but yielded no text to index."""
+
+
+class NeedsOcrError(EmptyExtractionError):
+    """The document is fine; this deployment cannot read it without OCR.
+
+    Distinct from a plain failure because the fix is environmental (configure an
+    OCR backend, or hand the file to a human), not a retry and not a bug.
+    """
+
+
+def _read_scan_with_ocr(
+    source: Path, settings, pages: list[tuple[int, str]]
+) -> tuple[list[tuple[int, str]], int]:
+    """Try OCR for a file with no text layer, or say why it could not."""
+    summary = f"{source.name}: {len(pages)} page(s), 0 extractable characters"
+    try:
+        backend = create_ocr_backend(settings)
+    except ValueError as exc:
+        raise NeedsOcrError(f"{summary} - {exc}") from exc
+    if backend is None:
+        raise NeedsOcrError(
+            f"{summary} - no OCR backend configured "
+            "(set OCR_BACKEND=tesseract to read scans)"
+        )
+    try:
+        ocr_pages = backend.extract(source.name, source.read_bytes())
+    except OcrUnavailableError as exc:
+        raise NeedsOcrError(
+            f"{summary} - OCR backend '{settings.ocr_backend}' unavailable: {exc}"
+        ) from exc
+    characters = sum(len(text.strip()) for _, text in ocr_pages)
+    if characters == 0:
+        raise NeedsOcrError(
+            f"{summary} - OCR ran with '{settings.ocr_backend}' but produced no text either"
+        )
+    return ocr_pages, characters
 
 
 def process_document(document_id: str, force: bool = False) -> dict[str, str]:
@@ -74,13 +111,17 @@ def process_document(document_id: str, force: bool = False) -> dict[str, str]:
                 extract_span.set_outputs({"page_count": len(pages), "characters": characters})
             if characters == 0:
                 # A scan or an image-only PDF: the extension passed the upload check,
-                # but there is nothing to index. Without this guard the document is
-                # published as "ready" with zero chunks - a success that can never be
-                # retrieved and never reports why.
-                raise EmptyExtractionError(
-                    f"{source.name}: {len(pages)} page(s), 0 extractable characters - "
-                    "likely a scanned document without a text layer (OCR required)"
-                )
+                # but there is nothing to index. A configured OCR backend gets a
+                # chance; otherwise the document is parked as needs_ocr instead of
+                # being published as "ready" with zero chunks - a success that can
+                # never be retrieved and never reports why.
+                with traces.span(
+                    "ingestion.ocr",
+                    run_type="tool",
+                    metadata={"document_id": document_id, "backend": settings.ocr_backend},
+                ) as ocr_span:
+                    pages, characters = _read_scan_with_ocr(source, settings, pages)
+                    ocr_span.set_outputs({"page_count": len(pages), "characters": characters})
             with traces.span(
                 "ingestion.chunk",
                 run_type="chain",
@@ -122,7 +163,10 @@ def process_document(document_id: str, force: bool = False) -> dict[str, str]:
                 "progress": "100",
             }
     except Exception as exc:
-        store.update_document_status(document_id, "failed")
+        # needs_ocr is not a failure: the file is intact and a human or an
+        # OCR-capable worker has to pick it up, so the status must say so.
+        status = "needs_ocr" if isinstance(exc, NeedsOcrError) else "failed"
+        store.update_document_status(document_id, status)
         store.update_document_progress(document_id, 0, str(exc))
         raise
 
@@ -153,7 +197,7 @@ def process_evaluation(evaluation_id: str) -> dict[str, str]:
 
 
 if celery_app is not None:
-    process_document = celery_app.task(name="evalrag.process_document", autoretry_for=(Exception,), dont_autoretry_for=(EmptyExtractionError,), retry_backoff=True, retry_kwargs={"max_retries": 3})(process_document)
+    process_document = celery_app.task(name="evalrag.process_document", autoretry_for=(Exception,), dont_autoretry_for=(EmptyExtractionError, NeedsOcrError), retry_backoff=True, retry_kwargs={"max_retries": 3})(process_document)
     process_evaluation = celery_app.task(
         name="evalrag.process_evaluation",
         autoretry_for=(Exception,),
