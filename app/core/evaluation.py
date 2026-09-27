@@ -41,9 +41,11 @@ def evidence_targets(example: Any) -> list[EvidenceTarget]:
 @dataclass(frozen=True)
 class RetrievalExample:
     question: str
-    # One document id, or several for a multi-hop question.
+    # One document id, or several for a multi-hop or equivalence question.
     expected_document_id: str | Sequence[str]
     retrieved_document_ids: list[str]
+    # "all" = every hop is needed; "any" = one of the equivalent labels suffices.
+    mode: str = "all"
 
     def __post_init__(self) -> None:
         expected = self.expected_document_id
@@ -55,6 +57,13 @@ class RetrievalExample:
     @property
     def targets(self) -> tuple[str, ...]:
         return self.expected_document_id  # type: ignore[return-value]
+
+
+def _per_hop(values: Sequence[float], mode: str) -> float:
+    """Conjunctive labels average over hops; equivalent labels take the best hop."""
+    if not values:
+        return 0.0
+    return fmean(values) if mode == "all" else max(values)
 
 
 def _ranks(example: RetrievalExample) -> dict[str, int]:
@@ -90,11 +99,31 @@ def all_targets_at_k(example: RetrievalExample, k: int) -> float:
     return float(all(ranks.get(target, k + 1) <= k for target in example.targets))
 
 
+def any_target_at_k(example: RetrievalExample, k: int) -> float:
+    """1.0 when one of the equivalent labels is inside the first ``k`` results."""
+    if not example.targets:
+        return 0.0
+    return float(any(rank <= k for rank in _ranks(example).values()))
+
+
+def satisfied_at_k(example: RetrievalExample, k: int) -> float:
+    """Whether the question counts as answered at ``k`` under this example's mode."""
+    if example.mode == "any":
+        return any_target_at_k(example, k)
+    return all_targets_at_k(example, k)
+
+
 def reciprocal_rank(example: RetrievalExample) -> float:
-    """Mean reciprocal rank over hops; a hop that was never retrieved contributes 0."""
+    """Mean reciprocal rank over hops; missing hops contribute 0.
+
+    Under ``mode="any"`` the best hop wins outright: averaging would punish an
+    equivalence question for the two documents the retriever was not asked about.
+    """
     if not example.targets:
         return 0.0
     ranks = _ranks(example)
+    if example.mode == "any":
+        return 1 / min(ranks.values()) if ranks else 0.0
     return fmean(1 / ranks[target] if target in ranks else 0.0 for target in example.targets)
 
 
@@ -108,15 +137,23 @@ def precision_at_k(example: RetrievalExample, k: int) -> float:
 
 
 def ndcg_at_k(example: RetrievalExample, k: int) -> float:
-    """Mean gain per hop; discounting is per target rather than over a single result list."""
+    """Per-hop gain; discounting is per target rather than over a single result list.
+
+    A hop that was never retrieved scores 0 under ``all`` and cannot drag the score
+    down under ``any``: the two modes ask different questions of the same ranking.
+    """
     if not example.targets:
         return 0.0
     ranks = _ranks(example)
-    gains = [
+    if example.mode == "any":
+        return _per_hop(
+            [1.0 / log2(rank + 1) for rank in ranks.values() if 0 < rank <= k],
+            "any",
+        )
+    return fmean(
         1.0 / log2(ranks[target] + 1) if 0 < ranks.get(target, k + 1) <= k else 0.0
         for target in example.targets
-    ]
-    return fmean(gains)
+    )
 
 
 def _without_whitespace(text: str) -> str:
@@ -155,16 +192,25 @@ def passage_ranks(
 def passage_metrics(
     retrieved_texts: Sequence[str],
     quotes: str | Sequence[str] | None,
+    mode: str = "all",
 ) -> dict[str, float]:
     """Whether the answering passages were retrieved, and how well they were ranked.
 
-    ``passage_hit`` requires every one of them (a two-hop question is not answered by a
-    single passage), while ``passage_mrr`` averages per-hop ranks so partial success
-    stays visible instead of collapsing to zero.
+    Under ``mode="all"`` (default) every quote must be retrieved, and the per-hop ranks
+    are averaged so partial success stays visible. Under ``mode="any"`` the labels are
+    equivalent alternatives and the best hop decides, so retrieving one of several
+    interchangeable passages is not scored as a third of a success.
     """
     ranks = passage_ranks(retrieved_texts, quotes)
     if not ranks:
         return {}
+    if mode == "any":
+        found = [rank for rank in ranks if rank]
+        return {
+            "passage_hit": 1.0 if found else 0.0,
+            "passage_at_1": 1.0 if found and min(found) == 1 else 0.0,
+            "passage_mrr": 1.0 / min(found) if found else 0.0,
+        }
     return {
         "passage_hit": 1.0 if all(ranks) else 0.0,
         "passage_at_1": 1.0 if all(rank == 1 for rank in ranks) else 0.0,
@@ -189,9 +235,10 @@ def metrics_at_k(example: RetrievalExample, cutoffs: Iterable[int]) -> dict[str,
     different top_k would change the candidate pool and therefore the ranking.
     """
     metrics: dict[str, float] = {"mrr": reciprocal_rank(example)}
+    target_key = "any_target_at" if example.mode == "any" else "all_targets_at"
     for k in cutoffs:
         metrics[f"recall_at_{k}"] = recall_at_k(example, k)
-        metrics[f"all_targets_at_{k}"] = all_targets_at_k(example, k)
+        metrics[f"{target_key}_{k}"] = satisfied_at_k(example, k)
         metrics[f"ndcg_at_{k}"] = ndcg_at_k(example, k)
         metrics[f"precision_at_{k}"] = precision_at_k(example, k)
     return metrics

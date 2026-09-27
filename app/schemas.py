@@ -101,6 +101,9 @@ class EvaluationExampleCreate(BaseModel):
     should_refuse: bool = False
     # Multi-hop questions list every hop here, each with its own quote.
     expected_evidence: list[EvidenceSpan] = Field(default_factory=list)
+    # "all" = every hop above is needed to answer; "any" = they are equivalent
+    # alternatives (the same definition written into three regulations).
+    evidence_mode: Literal["all", "any"] = "all"
 
     @model_validator(mode="after")
     def _validate_labels(self) -> "EvaluationExampleCreate":

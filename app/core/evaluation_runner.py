@@ -104,8 +104,15 @@ class EvaluationRunner:
                 }
                 aggregate["example_count"] = len(examples)
                 refusal_examples = [item for item in examples if item["should_refuse"]]
-                aggregate["answerable_example_count"] = len(examples) - len(refusal_examples)
+                answerable = [item for item in examples if not item["should_refuse"]]
+                aggregate["answerable_example_count"] = len(answerable)
                 aggregate["refusal_example_count"] = len(refusal_examples)
+                aggregate["all_mode_example_count"] = sum(
+                    1 for item in answerable if item["evidence_mode"] == "all"
+                )
+                aggregate["any_mode_example_count"] = sum(
+                    1 for item in answerable if item["evidence_mode"] == "any"
+                )
                 if refusal_examples:
                     # Kept out of every retrieval metric above: a question the corpus
                     # cannot answer has no correct document to find.
@@ -194,10 +201,12 @@ class EvaluationRunner:
                     for chunk, _ in metric_results
                 ]
                 targets = evidence_targets(example)
+                mode = example.evidence_mode
                 metric_example = RetrievalExample(
                     question=example.question,
                     expected_document_id=[target.document_id for target in targets],
                     retrieved_document_ids=retrieved_ids,
+                    mode=mode,
                 )
                 cutoffs = tuple(
                     sorted(
@@ -210,26 +219,22 @@ class EvaluationRunner:
                 passage_rank_values: list[int | None] = []
                 if targets:
                     metrics = metrics_at_k(metric_example, cutoffs)
-                    metrics["page_hit"] = float(
-                        all(
-                            any(
-                                chunk.document_id == target.document_id
-                                and (target.page is None or chunk.page == target.page)
-                                for chunk, _ in metric_results
-                            )
-                            for target in targets
+                    # Under "any" the labels are interchangeable, so one matched page is
+                    # enough; under "all" every labelled page has to be retrieved.
+                    matched = [
+                        any(
+                            chunk.document_id == target.document_id
+                            and (target.page is None or chunk.page == target.page)
+                            for chunk, _ in metric_results
                         )
-                    )
+                        for target in targets
+                    ]
+                    metrics["page_hit"] = float(any(matched) if mode == "any" else all(matched))
                     # Only annotated examples carry these keys, so the aggregate averages
                     # over the examples that actually hold ground truth.
-                    passage_rank_values = passage_ranks(
-                        retrieved_texts, [target.quote for target in targets]
-                    )
-                    metrics.update(
-                        passage_metrics(
-                            retrieved_texts, [target.quote for target in targets]
-                        )
-                    )
+                    quotes = [target.quote for target in targets]
+                    passage_rank_values = passage_ranks(retrieved_texts, quotes)
+                    metrics.update(passage_metrics(retrieved_texts, quotes, mode=mode))
                 else:
                     # An unanswerable example: retrieval is only allowed to stay empty.
                     # This is a false-positive proxy - grading an actual refusal needs the
@@ -269,6 +274,7 @@ class EvaluationRunner:
                     "expected_page": example.expected_page,
                     "expected_answer": example.expected_answer,
                     "should_refuse": bool(example.should_refuse),
+                    "evidence_mode": mode,
                     "expected_documents": [target.document_id for target in targets],
                     "generated_answer": generated_answer,
                     "judge_reason": judge_reason,

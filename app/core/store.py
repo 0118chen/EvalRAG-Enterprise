@@ -368,6 +368,7 @@ class SQLAlchemyStore:
                         evidence_quote=example.evidence_quote,
                         category=example.category,
                         should_refuse=example.should_refuse,
+                        evidence_mode=example.evidence_mode,
                         expected_evidence_json=(
                             json.dumps(
                                 [span.model_dump() for span in example.expected_evidence],
@@ -618,6 +619,7 @@ class SQLAlchemyStore:
                     evidence_quote=example.evidence_quote,
                     category=example.category,
                     should_refuse=bool(example.should_refuse),
+                    evidence_mode=example.evidence_mode,
                     expected_evidence=[
                         EvidenceSpan(**span)
                         for span in (

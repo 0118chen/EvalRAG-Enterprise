@@ -83,6 +83,8 @@ class EvaluationExampleRecord(Base):
     should_refuse: Mapped[bool] = mapped_column(Boolean, default=False)
     # JSON list of {"document_id", "page", "quote"} hops; read whole, never filtered in SQL.
     expected_evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "all": every hop is required. "any": the hops are equivalent alternatives.
+    evidence_mode: Mapped[str] = mapped_column(String(16), default="all")
 
 
 class EvaluationRecord(Base):
