@@ -1,6 +1,6 @@
 import asyncio
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Annotated, Protocol
 from uuid import uuid4
 
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 
 from app.api.deps import authenticate, get_container, resolve_tenant_id
 from app.core.concurrency import run_blocking
+from app.core.ingestion import SUPPORTED_LABEL, SUPPORTED_SUFFIXES
 from app.core.pipeline import create_ingestion_pipeline
 from app.schemas import VERSION_PATTERN, Document
 from app.tasks import process_document
@@ -75,10 +76,10 @@ async def upload_document(
     if not knowledge_base:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     filename = file.filename or "document.txt"
-    if not re.search(r"\.(pdf|docx|html|htm|xlsx|txt|md)$", filename.lower()):
+    if PurePosixPath(filename).suffix.lower() not in SUPPORTED_SUFFIXES:
         raise HTTPException(
             status_code=400,
-            detail="supported file types: pdf, docx, html, xlsx, txt, md",
+            detail=f"supported file types: {SUPPORTED_LABEL}",
         )
     limit = container.settings.max_upload_mb * 1024 * 1024
     declared_size = file.size

@@ -16,6 +16,11 @@ class Chunk:
 
 TEXT_ENCODINGS = ("utf-8-sig", "gb18030")
 
+# Single source of truth for what the pipeline can read: the upload route, the
+# corpus importer and the extraction dispatch all key off this.
+SUPPORTED_SUFFIXES = (".pdf", ".docx", ".html", ".htm", ".xlsx", ".txt", ".md")
+SUPPORTED_LABEL = "pdf, docx, html, xlsx, txt, md"
+
 # Elements whose text is never content.
 SKIP_TAGS = frozenset(
     {
@@ -353,7 +358,7 @@ def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
         return _extract_xlsx(payload)
     if lower.endswith((".txt", ".md")):
         return [(1, _decode_text(payload))]
-    raise ValueError("supported file types: pdf, docx, html, xlsx, txt, md")
+    raise ValueError(f"supported file types: {SUPPORTED_LABEL}")
 
 
 def chunk_pages(document_id: str, pages: list[tuple[int, str]], size: int = 800, overlap: int = 120) -> list[Chunk]:

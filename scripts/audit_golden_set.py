@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.core.ingestion import extract_text
+from app.core.ingestion import SUPPORTED_SUFFIXES, extract_text
 
 ROOT = Path(__file__).resolve().parents[1]
 LAW_DIR = ROOT / "law"
@@ -36,7 +36,7 @@ def normalize(text: str) -> str:
 def load_corpus() -> dict[str, list[tuple[int, str]]]:
     pages: dict[str, list[tuple[int, str]]] = {}
     for path in sorted(LAW_DIR.iterdir()):
-        if path.suffix.lower() not in {".pdf", ".docx"}:
+        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
         pages[path.name] = extract_text(path.name, path.read_bytes())
     return pages

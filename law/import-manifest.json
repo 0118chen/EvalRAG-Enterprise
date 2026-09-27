@@ -120,6 +120,53 @@
       "version": "latest",
       "size_bytes": 325491,
       "sha256": "45e80bc53688741c379dc6ba7a8679fff3208a8d4265b8d93be7dfa24d4f1397"
+    },
+    {
+      "document_id": "a5a6abd9-6c41-48d3-8c61-bb11e7d5c1ad",
+      "filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+      "status": "ready",
+      "chunks": 14,
+      "version": "latest",
+      "size_bytes": 403831,
+      "sha256": "fecff72c4bebbc776a1107d873d9677b543d8ed23ef74e8067a8c620fd8fe673"
+    },
+    {
+      "document_id": "c8d1bf48-2363-474a-b23d-9c430fedf75e",
+      "filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+      "status": "ready",
+      "chunks": 22,
+      "version": "latest",
+      "size_bytes": 475514,
+      "sha256": "052d0d873ec31bfe47f37cca507abe815a3b83891b1b15882d5674e6cb8f9752"
+    },
+    {
+      "document_id": "f9b0f7b9-8544-4e8a-a4ff-dbe746178a3c",
+      "filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+      "status": "ready",
+      "chunks": 13,
+      "version": "latest",
+      "size_bytes": 52530,
+      "sha256": "e2db1dba768d028800d122e2932e13fa77ae3886b124fb09d03b2d01b838e065"
+    },
+    {
+      "document_id": "722e4e21-86d0-4ffa-80b7-f795f3eeb450",
+      "filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+      "status": "ready",
+      "chunks": 15,
+      "version": "latest",
+      "size_bytes": 41651,
+      "sha256": "3ca9c0a25f9cfa52633bf753a89b6352d185966621069f59e0573917839c4bc5"
+    },
+    {
+      "document_id": "162c143b-20ca-4221-95ac-7b8e2b6fd74c",
+      "filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+      "status": "ready",
+      "chunks": 6,
+      "version": "latest",
+      "size_bytes": 12850,
+      "sha256": "07ae90a6555eb37342581e68f1c15e234d1c84eac8c1bfa2a615c41af16aa7f9"
     }
-  ]
+  ],
+  "updated_at": "2026-09-27T23:30:00+08:00",
+  "updated_note": "2026-09-27 追加 5 份（行政法规 / 地方性法规 / 司法解释 / 测算表），条目由 _corpus_import_probe.py 走生产 worker 真实导入生成"
 }

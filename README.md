@@ -34,13 +34,18 @@
 - 可选同步 Dataset 到 LangSmith，并使用 LangSmith `evaluate` 执行 Experiment。
 - CLI 支持运行实验和同步 Dataset。
 
-仓库自带两套评测集与六组配置的实测结果。
+仓库自带两套评测集与六组配置的实测结果。**语料自 2026-09-27 起为 18 份**
+（13 份 PDF/DOCX + 新增 2 份 PDF、2 份 HTML、1 份 XLSX，共 386 chunk；扩容前那轮的产物保留在
+`docs/evaluation/golden-set-2026-09-27.*` 与 `docs/evaluation/golden-set-v2-2026-09-27.*`，
+两轮对照见评测报告 §9）。
 
-v1（13 份法规、52 道页面级问题）：
+v1（18 份语料、52 道页面级问题）：
 
 ```bash
 python -m scripts.audit_golden_set --json docs/evaluation/golden-set-audit.json   # 标注回验（含 v2 段）
-python -m scripts.run_golden_experiment --json docs/evaluation/run.json           # 六组配置对比
+python -m scripts.run_golden_experiment \
+    --json docs/evaluation/golden-set-v1-corpus18-2026-09-27.json \
+    --markdown docs/evaluation/golden-set-v1-corpus18-2026-09-27.md              # 六组配置对比
 python -m scripts.profile_retrieval --database data/experiments/golden.db         # 延迟归因
 python -m scripts.probe_golden_difficulty --database data/experiments/golden.db   # 饱和成因探针
 ```
@@ -51,13 +56,16 @@ v2（75 题：52 同义改写 + 9 跨文档多跳 + 6 等价多标签 + 8 应拒
 # 重新生成需要 LLM key；校验失败的题会被丢弃并把原因写进 law/golden_eval_v2.rejected.json
 python -m scripts.generate_golden_set_v2 --output law/golden_eval_v2.json
 python -m scripts.run_golden_experiment --golden law/golden_eval_v2.json \
-    --json docs/evaluation/golden-set-v2.json --database data/experiments/golden-v2.db
+    --json docs/evaluation/golden-set-v2-corpus18-2026-09-27.json \
+    --markdown docs/evaluation/golden-set-v2-corpus18-2026-09-27.md \
+    --database data/experiments/golden-v2.db
 ```
 
 结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
-v1 标注 52/52 可回验，但指标已饱和（BM25+重排在文档级指标上满分），
+v1 标注 52/52 可回验，但指标已饱和（18 份语料上**纯 BM25** 就在文档级/页级拿满分，重排增益归零），
 且本地 32 维 hash 向量使 hybrid 反而低于纯 BM25；v2 去掉"问题里报法规名"的词面泄漏后
-指标明显下降，两种题集的对照见该报告的 §8。
+指标明显下降（R@1 1.000 → 0.660），两种题集的对照见该报告 §8，
+两轮语料（13 份 / 18 份）的对照与逐题归因见 §9。
 
 ```bash
 python -m app.cli run-evaluation <evaluation_id>

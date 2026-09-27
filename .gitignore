@@ -27,3 +27,6 @@ outputs/
 # Policy corpus originals stay local; only golden sets and manifests are versioned.
 law/*.pdf
 law/*.docx
+law/*.html
+law/*.htm
+law/*.xlsx

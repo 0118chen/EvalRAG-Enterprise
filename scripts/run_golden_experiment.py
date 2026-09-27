@@ -25,6 +25,7 @@ from statistics import median
 from typing import Any
 from uuid import uuid4
 
+from app.core.ingestion import SUPPORTED_SUFFIXES
 from scripts.golden_format import GoldenExample, load_golden, resolve_document_ids
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -116,7 +117,7 @@ def ingest_corpus(store, tenant_id: str, kb_id: str, kb_name: str) -> dict[str, 
     )
     by_filename: dict[str, str] = {}
     for path in sorted(LAW_DIR.iterdir()):
-        if path.suffix.lower() not in {".pdf", ".docx"}:
+        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
         document_id = str(uuid4())
         stage_upload(document_id, path.name)
