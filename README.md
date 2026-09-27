@@ -36,6 +36,7 @@
 python -m scripts.audit_golden_set --json docs/evaluation/golden-set-audit.json   # 标注回验
 python -m scripts.run_golden_experiment --json docs/evaluation/run.json           # 六组配置对比
 python -m scripts.profile_retrieval --database data/experiments/golden.db         # 延迟归因
+python -m scripts.probe_golden_difficulty --database data/experiments/golden.db   # 饱和成因探针
 ```
 
 结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
