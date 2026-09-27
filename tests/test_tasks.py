@@ -75,6 +75,38 @@ def _pipeline(dense, sparse) -> IngestionPipeline:
     )
 
 
+def _blank_page_pdf() -> bytes:
+    """A PDF whose page has no text layer - what a scan looks like to the extractor."""
+    import pymupdf
+
+    document = pymupdf.open()
+    page = document.new_page()
+    page.draw_rect(pymupdf.Rect(40, 40, 400, 700), color=(0, 0, 0), width=2)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _pdf_with_one_text_page() -> bytes:
+    """Same shape, but at least one page carries selectable text."""
+    import pymupdf
+
+    document = pymupdf.open()
+    document.new_page()  # page 1: no text
+    second = document.new_page()
+    second.insert_text((72, 100), "nong hu dai kuan guan li", fontsize=12)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _replace_upload(tmp_path, name: str, payload: bytes) -> None:
+    uploads = tmp_path / "data" / "uploads"
+    for existing in uploads.glob(f"{DOC}_*"):
+        existing.unlink()
+    (uploads / f"{DOC}_{name}").write_bytes(payload)
+
+
 def test_worker_writes_every_configured_backend_and_the_database(tmp_path, monkeypatch) -> None:
     store = _seed(tmp_path, monkeypatch)
     dense, sparse = RecordingIndexer(), RecordingIndexer()
@@ -164,3 +196,58 @@ def test_external_index_failure_keeps_document_failed_and_db_unchanged(
     assert document.error_message == "external index unavailable"
     # Local chunks are only written after every external write succeeded.
     assert store.get_chunks(KB, VERSION) == []
+
+
+def test_scanned_file_without_a_text_layer_fails_instead_of_indexing_nothing(
+    tmp_path, monkeypatch
+) -> None:
+    """A scan passes the upload extension check but extracts to nothing.
+
+    Indexing zero chunks silently is the worst outcome: the document reports
+    success and can never be retrieved.
+    """
+    store = _seed(tmp_path, monkeypatch)
+    dense, sparse = RecordingIndexer(), RecordingIndexer()
+    monkeypatch.setattr(
+        tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
+    )
+    _replace_upload(tmp_path, "scan.pdf", _blank_page_pdf())
+
+    with pytest.raises(tasks.EmptyExtractionError):
+        _run(DOC)
+
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "failed"
+    assert "characters" in (document.error_message or "")
+    assert store.get_chunks(KB, VERSION) == []
+    # Nothing was indexed anywhere, and no progress was reported for a success path.
+    assert dense.calls == []
+    assert sparse.calls == []
+    assert document.chunks == 0
+
+
+def test_empty_extraction_is_not_retried_by_the_queue() -> None:
+    if tasks.celery_app is None:
+        pytest.skip("celery is not installed in this environment")
+    assert tasks.EmptyExtractionError in tuple(tasks.process_document.dont_autoretry_for)
+
+
+def test_a_partly_machine_readable_document_is_still_indexed(
+    tmp_path, monkeypatch
+) -> None:
+    """Regression guard: one blank page must not fail a document that has text."""
+    store = _seed(tmp_path, monkeypatch)
+    dense, sparse = RecordingIndexer(), RecordingIndexer()
+    monkeypatch.setattr(
+        tasks, "create_ingestion_pipeline", lambda settings: _pipeline(dense, sparse)
+    )
+    _replace_upload(tmp_path, "mixed.pdf", _pdf_with_one_text_page())
+
+    result = _run(DOC)
+
+    assert result["status"] == "ready"
+    document = store.get_document_any(DOC)
+    assert document is not None
+    assert document.status == "ready"
+    assert len(store.get_chunks(KB, VERSION)) == 1

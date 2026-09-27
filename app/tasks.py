@@ -28,6 +28,10 @@ except ImportError:  # pragma: no cover - dependencies are installed in producti
     celery_app = None
 
 
+class EmptyExtractionError(RuntimeError):
+    """The file passed the upload check but yielded no text to index."""
+
+
 def process_document(document_id: str, force: bool = False) -> dict[str, str]:
     """Process one persisted upload; concurrent or retried deliveries stay safe."""
     store = create_store(settings.database_url)
@@ -66,7 +70,17 @@ def process_document(document_id: str, force: bool = False) -> dict[str, str]:
                 metadata={"document_id": document_id},
             ) as extract_span:
                 pages = extract_text(source.name, source.read_bytes())
-                extract_span.set_outputs({"page_count": len(pages)})
+                characters = sum(len(text.strip()) for _, text in pages)
+                extract_span.set_outputs({"page_count": len(pages), "characters": characters})
+            if characters == 0:
+                # A scan or an image-only PDF: the extension passed the upload check,
+                # but there is nothing to index. Without this guard the document is
+                # published as "ready" with zero chunks - a success that can never be
+                # retrieved and never reports why.
+                raise EmptyExtractionError(
+                    f"{source.name}: {len(pages)} page(s), 0 extractable characters - "
+                    "likely a scanned document without a text layer (OCR required)"
+                )
             with traces.span(
                 "ingestion.chunk",
                 run_type="chain",
@@ -139,7 +153,7 @@ def process_evaluation(evaluation_id: str) -> dict[str, str]:
 
 
 if celery_app is not None:
-    process_document = celery_app.task(name="evalrag.process_document", autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})(process_document)
+    process_document = celery_app.task(name="evalrag.process_document", autoretry_for=(Exception,), dont_autoretry_for=(EmptyExtractionError,), retry_backoff=True, retry_kwargs={"max_retries": 3})(process_document)
     process_evaluation = celery_app.task(
         name="evalrag.process_evaluation",
         autoretry_for=(Exception,),
