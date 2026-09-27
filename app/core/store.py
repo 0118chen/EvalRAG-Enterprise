@@ -364,6 +364,7 @@ class SQLAlchemyStore:
                         expected_answer=example.expected_answer,
                         expected_document_id=example.expected_document_id,
                         expected_page=example.expected_page,
+                        evidence_quote=example.evidence_quote,
                         category=example.category,
                     )
                     for example in dataset.examples
@@ -604,6 +605,7 @@ class SQLAlchemyStore:
                     expected_answer=example.expected_answer,
                     expected_document_id=example.expected_document_id,
                     expected_page=example.expected_page,
+                    evidence_quote=example.evidence_quote,
                     category=example.category,
                 )
                 for example in examples

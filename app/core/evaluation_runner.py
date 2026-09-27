@@ -8,7 +8,13 @@ from typing import Any
 
 from app.config import Settings
 from app.core.answer_evaluation import judge_answer
-from app.core.evaluation import RetrievalExample, latency_percentiles, metrics_at_k
+from app.core.evaluation import (
+    RetrievalExample,
+    latency_percentiles,
+    metrics_at_k,
+    passage_metrics,
+    passage_rank,
+)
 from app.core.langsmith_eval import LangSmithEvaluationAdapter
 from app.core.observability import TraceManager
 from app.core.rag import answer_with_evidence
@@ -199,6 +205,17 @@ class EvaluationRunner:
                     for chunk, _ in metric_results
                 )
                 metrics["page_hit"] = float(page_hit)
+                passage_rank_value: int | None = None
+                if example.evidence_quote:
+                    retrieved_texts = [chunk.text for chunk, _ in metric_results]
+                    passage_rank_value = passage_rank(
+                        retrieved_texts, example.evidence_quote
+                    )
+                    # Only annotated examples carry these keys, so the aggregate averages
+                    # over the examples that actually hold ground truth.
+                    metrics.update(
+                        passage_metrics(retrieved_texts, example.evidence_quote)
+                    )
                 generated_answer: str | None = None
                 judge_reason: str | None = None
                 if answer_evaluation:
@@ -245,6 +262,7 @@ class EvaluationRunner:
                         for chunk, score in metric_results
                     ],
                     "metrics": metrics,
+                    "passage_rank": passage_rank_value,
                     "cache_hit": retrieved.cache_hit,
                     "rewritten_queries": retrieved.rewritten_queries,
                     "latency_ms": (perf_counter() - started) * 1000,

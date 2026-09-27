@@ -3,6 +3,8 @@ from app.core.evaluation import (
     evaluation_metadata,
     latency_percentiles,
     metrics_at_k,
+    passage_metrics,
+    passage_rank,
     recall_at_k,
     reciprocal_rank,
 )
@@ -51,4 +53,30 @@ def test_latency_percentiles_use_nearest_rank() -> None:
     assert percentiles["p95"] == 50.0
     assert percentiles["p100"] == 50.0
     assert latency_percentiles([]) == {}
+
+
+def test_passage_rank_locates_the_answering_chunk() -> None:
+    retrieved = ["header of the regulation", "loan   policy\neffective date", "appendix"]
+
+    assert passage_rank(retrieved, "loan policy effective date") == 2
+    assert passage_rank(retrieved, "not in any chunk") is None
+
+
+def test_passage_rank_treats_an_empty_quote_as_no_evidence() -> None:
+    # An empty quote must never match: it would report a perfect score for nothing.
+    assert passage_rank(["anything"], "") is None
+    assert passage_rank(["anything"], "   ") is None
+
+
+def test_passage_metrics_reward_finding_the_passage_and_ranking_it_first() -> None:
+    quote = "loan policy effective date"
+
+    first = passage_metrics(["loan policy effective date", "other"], quote)
+    assert first == {"passage_hit": 1.0, "passage_at_1": 1.0, "passage_mrr": 1.0}
+
+    second = passage_metrics(["other", "loan policy effective date"], quote)
+    assert second == {"passage_hit": 1.0, "passage_at_1": 0.0, "passage_mrr": 0.5}
+
+    missing = passage_metrics(["other", "more"], quote)
+    assert missing == {"passage_hit": 0.0, "passage_at_1": 0.0, "passage_mrr": 0.0}
 

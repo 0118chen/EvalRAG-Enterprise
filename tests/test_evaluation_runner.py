@@ -24,7 +24,7 @@ class FakeJudgeLLM:
         return "贷款政策生效日期为一月一日。"
 
 
-def _prepared_runner(tmp_path):
+def _prepared_runner(tmp_path, extra_examples=None):
     """One document, one chunk and one golden example, wired exactly as production is."""
     settings = Settings(langsmith_enabled=False)
     store = SQLiteStore(str(tmp_path / "eval.db"))
@@ -62,7 +62,9 @@ def _prepared_runner(tmp_path):
                     expected_answer="The effective date is January first.",
                     expected_document_id="doc",
                     expected_page=2,
-                )
+                    evidence_quote="loan policy effective date",
+                ),
+                *(extra_examples or []),
             ],
         )
     )
@@ -125,3 +127,35 @@ def test_evaluation_runner_reports_every_cutoff_latency_and_retrieved_text(tmp_p
     retrieved = result["results"]["examples"][0]["retrieved"]
     assert retrieved[0]["chunk_id"] == "chunk"
     assert retrieved[0]["text"] == "loan policy effective date"
+
+
+def test_evaluation_runner_reports_passage_metrics_for_annotated_examples(tmp_path) -> None:
+    runner, _store = _prepared_runner(tmp_path)
+
+    result = asyncio.run(runner.run("eval"))
+
+    metrics = result["results"]["metrics"]
+    assert metrics["passage_hit"] == 1.0
+    assert metrics["passage_at_1"] == 1.0
+    assert metrics["passage_mrr"] == 1.0
+    assert result["results"]["examples"][0]["passage_rank"] == 1
+
+
+def test_passage_metrics_ignore_examples_without_a_quote(tmp_path) -> None:
+    unannotated = EvaluationExample(
+        id="example-2",
+        dataset_id="dataset",
+        question="something the corpus cannot answer",
+        expected_document_id="doc",
+        expected_page=1,
+    )
+    runner, _store = _prepared_runner(tmp_path, extra_examples=[unannotated])
+
+    result = asyncio.run(runner.run("eval"))
+
+    metrics = result["results"]["metrics"]
+    assert metrics["example_count"] == 2
+    # The unannotated example must not dilute the passage average: it is not evidence.
+    assert metrics["passage_hit"] == 1.0
+    assert metrics["passage_at_1"] == 1.0
+    assert any(item["passage_rank"] is None for item in result["results"]["examples"])

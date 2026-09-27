@@ -62,11 +62,16 @@ def test_evaluation_api_runs_and_compares(tmp_path, monkeypatch) -> None:
                     "question": "policy effective date",
                     "expected_document_id": "doc",
                     "expected_page": 1,
+                    "evidence_quote": "policy effective date",
                 }
             ],
         },
     )
     assert dataset_response.status_code == 201
+    examples = client.get(
+        f"/api/v1/evaluation-datasets/{dataset_response.json()['id']}"
+    ).json()["examples"]
+    assert examples[0]["evidence_quote"] == "policy effective date"
     evaluation_response = client.post(
         "/api/v1/evaluations",
         json={
@@ -83,6 +88,11 @@ def test_evaluation_api_runs_and_compares(tmp_path, monkeypatch) -> None:
     completed = client.get(f"/api/v1/evaluations/{evaluation_id}").json()
     assert completed["status"] == "completed"
     assert completed["results"]["metrics"]["recall_at_3"] == 1.0
+    # The API must carry the quote through to the metrics: passage-level scores are the
+    # only ones that still discriminate once document-level recall saturates.
+    assert completed["results"]["metrics"]["passage_hit"] == 1.0
+    assert completed["results"]["metrics"]["passage_at_1"] == 1.0
+    assert completed["results"]["examples"][0]["passage_rank"] == 1
     compare = client.get(
         f"/api/v1/evaluations/{evaluation_id}/compare"
     ).json()

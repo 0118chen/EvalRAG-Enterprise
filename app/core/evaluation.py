@@ -38,6 +38,37 @@ def ndcg_at_k(example: RetrievalExample, k: int) -> float:
     return 1.0 / log2(rank + 1)
 
 
+def _without_whitespace(text: str) -> str:
+    """Chunking collapses whitespace, so quotes taken from the raw file may not match."""
+    return "".join(text.split())
+
+
+def passage_rank(retrieved_texts: Sequence[str], quote: str | None) -> int | None:
+    """Rank of the first retrieved passage containing the ground-truth quote.
+
+    Returns None when the quote is empty or absent from every passage. Document-level
+    metrics cannot see this: with few documents a mediocre ranking still puts the right
+    document on top, while the sentence that actually answers the question may be last.
+    """
+    needle = _without_whitespace(quote or "")
+    if not needle:
+        return None
+    for rank, text in enumerate(retrieved_texts, start=1):
+        if needle in _without_whitespace(text):
+            return rank
+    return None
+
+
+def passage_metrics(retrieved_texts: Sequence[str], quote: str | None) -> dict[str, float]:
+    """Whether the answering passage was retrieved, and how well it was ranked."""
+    rank = passage_rank(retrieved_texts, quote)
+    return {
+        "passage_hit": 1.0 if rank else 0.0,
+        "passage_at_1": 1.0 if rank == 1 else 0.0,
+        "passage_mrr": 1.0 / rank if rank else 0.0,
+    }
+
+
 def retrieval_metrics(example: RetrievalExample, k: int) -> dict[str, float]:
     return {
         f"recall_at_{k}": recall_at_k(example, k),

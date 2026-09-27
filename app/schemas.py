@@ -85,6 +85,7 @@ class EvaluationExampleCreate(BaseModel):
     expected_answer: str | None = Field(default=None, max_length=4000)
     expected_document_id: str = Field(min_length=1, max_length=128)
     expected_page: int | None = Field(default=None, ge=1)
+    evidence_quote: str | None = Field(default=None, max_length=4000)
     category: str = Field(default="general", max_length=100)
 
 

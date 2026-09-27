@@ -78,6 +78,7 @@ class EvaluationExampleRecord(Base):
     expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     expected_document_id: Mapped[str] = mapped_column(String(36), index=True)
     expected_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    evidence_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(100), default="general")
 
 
