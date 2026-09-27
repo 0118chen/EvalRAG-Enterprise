@@ -11,6 +11,26 @@ class Chunk:
     version: str = "latest"
 
 
+TEXT_ENCODINGS = ("utf-8-sig", "gb18030")
+
+
+def _decode_text(payload: bytes) -> str:
+    """Decode a plain-text upload the way Chinese corpora actually arrive.
+
+    UTF-8 first (BOM tolerated and stripped), then GB18030 - a superset of GBK,
+    which is what most legacy government text files use. Decoding those as UTF-8
+    with errors="replace" silently turns the whole document into U+FFFD and the
+    ingestion still reports success. Anything that is neither encoding still
+    decodes, with replacement characters, instead of failing the upload.
+    """
+    for encoding in TEXT_ENCODINGS:
+        try:
+            return payload.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return payload.decode("utf-8", errors="replace")
+
+
 def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
     lower = filename.lower()
     if lower.endswith(".pdf"):
@@ -23,7 +43,7 @@ def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
         document = Document(BytesIO(payload))
         return [(1, "\n".join(paragraph.text for paragraph in document.paragraphs))]
     if lower.endswith((".txt", ".md")):
-        return [(1, payload.decode("utf-8", errors="replace"))]
+        return [(1, _decode_text(payload))]
     raise ValueError("supported file types: pdf, docx, txt, md")
 
 
