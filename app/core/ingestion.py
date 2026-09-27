@@ -1,4 +1,6 @@
+import re
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from io import BytesIO
 
 
@@ -12,6 +14,223 @@ class Chunk:
 
 
 TEXT_ENCODINGS = ("utf-8-sig", "gb18030")
+
+# Elements whose text is never content.
+SKIP_TAGS = frozenset(
+    {
+        "script",
+        "style",
+        "noscript",
+        "template",
+        "iframe",
+        "svg",
+        "canvas",
+        "form",
+        "button",
+        "select",
+        "option",
+        "textarea",
+        "nav",
+        "header",
+        "footer",
+        "aside",
+    }
+)
+
+# Elements that end a line of text.
+BLOCK_TAGS = frozenset(
+    {
+        "p",
+        "div",
+        "br",
+        "hr",
+        "li",
+        "ul",
+        "ol",
+        "dl",
+        "dt",
+        "dd",
+        "tr",
+        "td",
+        "th",
+        "table",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "section",
+        "article",
+        "blockquote",
+        "pre",
+        "figure",
+        "figcaption",
+        "main",
+        "address",
+    }
+)
+
+VOID_TAGS = frozenset(
+    {"br", "img", "meta", "link", "input", "hr", "source", "area", "base", "col", "embed", "wbr"}
+)
+
+# class/id hints that mark site chrome rather than content. A hint only counts when the
+# same attribute carries no content-ish word: `site-header` is dropped, `article-header`
+# (which usually holds the title) is kept.
+NOISE_HINTS = (
+    "nav",
+    "menu",
+    "header",
+    "footer",
+    "crumb",
+    "breadcrumb",
+    "sidebar",
+    "side-bar",
+    "share",
+    "related",
+    "recommend",
+    "print",
+    "banner",
+    "copyright",
+    "toolbar",
+    "top-bar",
+    "search",
+    "advert",
+)
+CONTENT_HINTS = ("content", "article", "editor", "main", "text", "body", "detail", "trs", "zoom")
+TOKEN = re.compile(r"[^a-z0-9]+")
+
+# Structural hints are not enough: real pages leak chrome through generic divs.
+# These are line-level residues observed on actual government pages (copyright,
+# ICP filing number, session tokens, modal prompts, print/share widgets).
+CHROME_WORDS = (
+    "首页",
+    "版权所有",
+    "网站地图",
+    "站点地图",
+    "icp备",
+    "icp证",
+    "公安备案",
+    "打印本页",
+    "关闭窗口",
+    "分享到",
+    "无障碍",
+    "是否继续",
+    "即将离开",
+    "主办单位",
+    "承办单位",
+    "技术支持",
+    "网站声明",
+    "联系我们",
+    "返回顶部",
+    "扫一扫",
+    "关注我们",
+    "手机版",
+    "字体大小",
+    "字号",
+    "上一篇",
+    "下一篇",
+    "浏览次数",
+    "访问量",
+)
+CHROME_PATTERNS = (
+    re.compile(r"^[×✕✖xX]$"),
+    re.compile(r"^[0-9a-f]{16,}$", re.IGNORECASE),
+    re.compile(r"^[A-Za-z0-9+/=]{24,}$"),
+)
+# Only short lines are candidates: a provision that mentions a chrome word is a
+# sentence, and sentences in these documents are long.
+CHROME_MAX_LINE = 40
+
+
+def _is_chrome_line(line: str) -> bool:
+    if len(line) > CHROME_MAX_LINE:
+        return False
+    lowered = line.lower()
+    if any(pattern.match(line) for pattern in CHROME_PATTERNS):
+        return True
+    return any(word in lowered for word in CHROME_WORDS)
+
+
+def _is_boilerplate(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+    if tag in SKIP_TAGS:
+        return True
+    for name, value in attrs:
+        if name not in ("class", "id", "role", "aria-label") or not value:
+            continue
+        tokens = {token for token in TOKEN.split(value.lower()) if token}
+        if tokens & set(CONTENT_HINTS):
+            continue
+        if any(hint in tokens or hint in value.lower() for hint in NOISE_HINTS):
+            return True
+    return False
+
+
+class _HtmlTextExtractor(HTMLParser):
+    """Turn a web page into text, leaving out code and site chrome.
+
+    Government norms are frequently published only as HTML pages, and the page
+    around the text (menus, breadcrumbs, share widgets, footers) is exactly the
+    kind of boilerplate that produces confident wrong answers if it is indexed.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skipping = 0
+
+    def _line_break(self) -> None:
+        if self.parts and not self.parts[-1].endswith("\n"):
+            self.parts.append("\n")
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._skipping:
+            if tag not in VOID_TAGS:
+                self._skipping += 1
+            return
+        if _is_boilerplate(tag, attrs):
+            self._skipping = 1
+            return
+        if tag in BLOCK_TAGS:
+            self._line_break()
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._skipping:
+            return
+        if _is_boilerplate(tag, attrs):
+            return
+        if tag in BLOCK_TAGS:
+            self._line_break()
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._skipping:
+            self._skipping -= 1
+            return
+        if tag in BLOCK_TAGS:
+            self._line_break()
+
+    def handle_data(self, data: str) -> None:
+        if self._skipping:
+            return
+        self.parts.append(data)
+
+
+def _extract_html(payload: bytes) -> str:
+    """Extract the readable text of an HTML document.
+
+    The declared charset is deliberately ignored: in practice these pages are
+    UTF-8 or GB18030/GB2312, and the same encoding ladder used for plain text
+    covers both without trusting a meta tag that is often wrong.
+    """
+    extractor = _HtmlTextExtractor()
+    extractor.feed(_decode_text(payload))
+    extractor.close()
+    lines = (
+        re.sub(r"[ \t\u3000\xa0]+", " ", line).strip()
+        for line in "".join(extractor.parts).splitlines()
+    )
+    return "\n".join(line for line in lines if line and not _is_chrome_line(line))
 
 
 def _decode_text(payload: bytes) -> str:
@@ -42,9 +261,11 @@ def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
         from docx import Document
         document = Document(BytesIO(payload))
         return [(1, "\n".join(paragraph.text for paragraph in document.paragraphs))]
+    if lower.endswith((".html", ".htm")):
+        return [(1, _extract_html(payload))]
     if lower.endswith((".txt", ".md")):
         return [(1, _decode_text(payload))]
-    raise ValueError("supported file types: pdf, docx, txt, md")
+    raise ValueError("supported file types: pdf, docx, html, txt, md")
 
 
 def chunk_pages(document_id: str, pages: list[tuple[int, str]], size: int = 800, overlap: int = 120) -> list[Chunk]:

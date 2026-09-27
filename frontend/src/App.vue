@@ -515,7 +515,7 @@ onMounted(() => {
               {{ busy ? '处理中' : '上传文档' }}
               <input
                 type="file"
-                accept=".pdf,.docx,.txt,.md"
+                accept=".pdf,.docx,.html,.htm,.txt,.md"
                 :disabled="busy || !selectedKb"
                 @change="uploadDocument"
               />

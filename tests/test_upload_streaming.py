@@ -127,7 +127,7 @@ def test_api_streams_upload_to_disk_and_queues_processing(tmp_path, monkeypatch)
 
 @pytest.mark.parametrize(
     "filename",
-    ["scan.jpg", "screenshot.png", "old.doc", "page.html", "table.xls", "table.xlsx", "bundle.zip"],
+    ["scan.jpg", "screenshot.png", "old.doc", "table.xls", "table.xlsx", "bundle.zip"],
 )
 def test_api_rejects_file_types_it_has_no_parser_for(tmp_path, monkeypatch, filename) -> None:
     """Regression guard: the whitelist is the contract, and it is extension-only."""
@@ -140,10 +140,25 @@ def test_api_rejects_file_types_it_has_no_parser_for(tmp_path, monkeypatch, file
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "supported file types: pdf, docx, txt, md"
+    assert response.json()["detail"] == "supported file types: pdf, docx, html, txt, md"
     assert queued == []
     upload_dir = tmp_path / "data" / "uploads"
     assert not upload_dir.exists() or list(upload_dir.glob("*")) == []
+
+
+@pytest.mark.parametrize("filename", ["page.html", "page.htm"])
+def test_api_accepts_html_documents(tmp_path, monkeypatch, filename) -> None:
+    """Web-only regulations used to be rejected with 400; they are content."""
+    client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
+
+    response = client.post(
+        "/api/v1/documents",
+        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
+        files={"file": (filename, "<html><body><p>第一条</p></body></html>", "text/html")},
+    )
+
+    assert response.status_code == 201
+    assert queued == [response.json()["id"]]
 
 
 def test_api_accepts_a_scanned_pdf_and_leaves_the_verdict_to_the_worker(
