@@ -1,3 +1,4 @@
+import datetime
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -233,6 +234,91 @@ def _extract_html(payload: bytes) -> str:
     return "\n".join(line for line in lines if line and not _is_chrome_line(line))
 
 
+def _cell_text(cell) -> str:
+    """Serialise a cell the way the document displays it.
+
+    A cell holding 0.4 formatted as a percentage reads "40%" on screen and in
+    every question asked about it, so the number format is part of the content.
+    """
+    value = cell.value
+    if value is None:
+        return ""
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()[:10]
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, float):
+        if "%" in cell.number_format:
+            return f"{value * 100:g}%"
+        if value.is_integer():
+            return str(int(value))
+    return str(value).strip()
+
+
+def _row_pairs(header: list[str], row) -> list[str]:
+    pairs: list[str] = []
+    for index, cell in enumerate(row):
+        text = _cell_text(cell)
+        if not text:
+            continue
+        name = header[index] if index < len(header) and header[index] else f"第{index + 1}列"
+        pairs.append(f"{name}: {text}")
+    return pairs
+
+
+def _non_empty(row) -> list[str]:
+    return [text for cell in row if (text := _cell_text(cell))]
+
+
+def _extract_xlsx(payload: bytes) -> list[tuple[int, str]]:
+    """One page per worksheet, and every row repeats its column names.
+
+    A sheet flattened into a single string loses which column a number belongs to
+    the moment the text is cut into chunks: the header row ends up hundreds of
+    characters away from the value it describes. Serialising each row as
+    self-describing "列名: 值" pairs means a chunk only has to contain the row,
+    not the whole sheet.
+
+    Real sheets start with title rows, not headers - the sample that drove this
+    had "附件1", then "102个县（市）名单", then a blank row, and only then the
+    header - so the header is the first row with at least two filled cells and
+    everything above it is kept as content.
+
+    Limitations worth knowing: a merged or two-row header leaves later names as
+    第N列 and repeated names stay ambiguous (the sample header repeats 序号/省辖市/
+    市县区 across two column blocks); formulas are read from their cached values;
+    the workbook is loaded in full.
+    """
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(BytesIO(payload), data_only=True)
+    pages: list[tuple[int, str]] = []
+    for number, sheet in enumerate(workbook.worksheets, start=1):
+        rows = [list(row) for row in sheet.iter_rows()]
+        header_index = next(
+            (index for index, row in enumerate(rows) if len(_non_empty(row)) >= 2),
+            None,
+        )
+        lines: list[str] = []
+        if header_index is None:
+            lines = [" | ".join(texts) for row in rows if (texts := _non_empty(row))]
+        else:
+            lines = [
+                " | ".join(texts) for row in rows[:header_index] if (texts := _non_empty(row))
+            ]
+            header = [_cell_text(cell) for cell in rows[header_index]]
+            for position, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
+                pairs = _row_pairs(header, row)
+                if pairs:
+                    lines.append(f"{sheet.title} 第{position}行 " + " | ".join(pairs))
+            if not lines:
+                # A header with no data rows is still content, and emitting
+                # nothing would fail the document at the empty-extraction guard.
+                lines = [f"{sheet.title} 表头 " + " | ".join(name for name in header if name)]
+        pages.append((number, "\n".join(lines)))
+    return pages
+
+
 def _decode_text(payload: bytes) -> str:
     """Decode a plain-text upload the way Chinese corpora actually arrive.
 
@@ -263,9 +349,11 @@ def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
         return [(1, "\n".join(paragraph.text for paragraph in document.paragraphs))]
     if lower.endswith((".html", ".htm")):
         return [(1, _extract_html(payload))]
+    if lower.endswith(".xlsx"):
+        return _extract_xlsx(payload)
     if lower.endswith((".txt", ".md")):
         return [(1, _decode_text(payload))]
-    raise ValueError("supported file types: pdf, docx, html, txt, md")
+    raise ValueError("supported file types: pdf, docx, html, xlsx, txt, md")
 
 
 def chunk_pages(document_id: str, pages: list[tuple[int, str]], size: int = 800, overlap: int = 120) -> list[Chunk]:

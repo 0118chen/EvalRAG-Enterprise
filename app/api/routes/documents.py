@@ -75,10 +75,10 @@ async def upload_document(
     if not knowledge_base:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     filename = file.filename or "document.txt"
-    if not re.search(r"\.(pdf|docx|html|htm|txt|md)$", filename.lower()):
+    if not re.search(r"\.(pdf|docx|html|htm|xlsx|txt|md)$", filename.lower()):
         raise HTTPException(
             status_code=400,
-            detail="supported file types: pdf, docx, html, txt, md",
+            detail="supported file types: pdf, docx, html, xlsx, txt, md",
         )
     limit = container.settings.max_upload_mb * 1024 * 1024
     declared_size = file.size
