@@ -259,6 +259,52 @@
   没有独立的机器判定（`rejected.json` 里记录了 3 次"两跳来自同一侧"）；
   等价题的候选池受语料限制，全库只有 23 句共享句（其中 3 句是定义型）。
 
+### 事项十八：无文字层文件不再"成功地上传了一份检索不到的东西"
+
+- 根因：上传校验只看**扩展名**，而 `extract_text` 对扫描版 PDF 返回的是
+  `[(1, ""), (2, ""), ...]`——页数正常、字符全空。下游 `chunk_pages` 得到 0 个 chunk，
+  `process_document` 照样把文档置为 `ready`、进度 100%、`stage=indexed`、不报错。
+  文档此后永远检索不到，也没有任何地方能看出为什么。
+- 复现（真实代码路径，非构造断言）：用一份真实的 11 页县级财政扫描件（无文字层，
+  见 `语料候选-2026-09-27/`）走过完整上传与抽取链路，得到
+  `result={'status': 'ready', 'stage': 'indexed', 'progress': '100'}`、
+  `document.status=ready chunks=0 error=None`、库里 0 个 chunk。
+- 设计选择：在抽取后立即检查**可提取字符数**（`sum(len(text.strip()))`），为 0 时抛
+  `EmptyExtractionError`，走既有的失败路径：状态 `failed`、写入原因
+  `N page(s), 0 extractable characters - likely a scanned document without a text layer (OCR required)`，
+  并且**在任何索引写入之前**中止（测试断言 dense/sparse 两个索引器一次都没被调用）。
+  失败原因复用已有的 `Document.error_message`，`GET /api/v1/documents/{id}` 直接可见。
+- 替代方案与取舍：① 新增 `needs_ocr` 状态语义更准，但要动 DB 枚举、迁移、前端渲染和
+  状态机，本轮用 `failed` + 可执行的原因文字，成本低且不引入新状态；
+  ② 在 Worker 里做 OCR（`pymupdf` 只能取文字层，需要 Tesseract/PaddleOCR 及镜像体积），
+  这是"支持扫描件"而不是"不假装成功"，属于后续独立事项；
+  ③ 把空抽取也纳入自动重试——被否掉，这是文件的稳定属性，重试只是把同一个失败重复三遍，
+  因此任务注册里加了 `dont_autoretry_for=(EmptyExtractionError,)`。
+- 新增测试：`tests/test_tasks.py::test_scanned_file_without_a_text_layer_fails_instead_of_indexing_nothing`
+  （RED 已验证）、`::test_empty_extraction_is_not_retried_by_the_queue`（RED 已验证）、
+  `::test_a_partly_machine_readable_document_is_still_indexed`（边界回归：只作废页数全空的文件，
+  有文字的文档不受影响）。
+- 验证命令及结果：`pytest tests/test_tasks.py` → 8 passed；全量 `pytest -q` → 157 passed；`ruff` 干净。
+- 仍存在的限制：白名单仍然只看扩展名，所以真正的判定发生在 Worker 而不是上传响应里；
+  扩展名正确但内容损坏（如伪装成 .pdf 的文本）走通用异常路径，原因文字是解析器原文而不是人话；
+  语料里目前没有扫描件，这个缺陷是在候选语料上发现的，仓库内没有真实扫描件做端到端回归。
+
+### 事项十九：`.txt`/`.md` 的 GB18030 解码
+
+- 根因：纯文本分支是 `payload.decode("utf-8", errors="replace")`。中文公文式文本文件大量是
+  GBK/GB18030，用 UTF-8 宽松解码不会失败——它把每个汉字变成 U+FFFD，**静默产出乱码并照样入库**。
+  实测一句 25 字的中文按 GB18030 编码后，替换字符 35 个。
+- 设计选择：按 `("utf-8-sig", "gb18030")` 顺序严格解码，全部失败才回退 `errors="replace"`。
+  `utf-8-sig` 顺带解决 BOM：原来 BOM 会作为 `\ufeff` 留在正文首字符，进入第一个 chunk 的正文。
+  GB18030 是 GBK 的超集，覆盖范围更宽；顺序上 UTF-8 优先，因为它是新文件的实际编码。
+- 替代方案与取舍：不引入 `charset-normalizer`/`chardet` 这类探测库——多一个依赖只为两三种编码，
+  而"先 UTF-8 再 GB18030"能覆盖实际会遇到的情况；代价是"恰好同时是合法 UTF-8 的 GBK 字节"
+  会被判成 UTF-8（GBK 汉字对极少，且那种文件本来就无解）。
+- 新增测试：`tests/test_ingestion.py` 4 例（GB18030 解码、UTF-8 仍按 UTF-8、BOM 被去掉、
+  两者都不匹配时不抛异常），前两例 RED 已验证。
+- 仍存在的限制：这是"猜编码"，没有根据文件声明或统计特征判定；
+  `.docx`/`.pdf` 的编码由各自的库负责，不走这条路径。
+
 ## P1：可靠性与安全
 
 - [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
@@ -269,6 +315,10 @@
   - 验收：上传 `v9` 文档后，默认查询能命中该文档；新增覆盖多版本语料的测试。
 
 - [x] 上传改为分块流式写入，在读取过程中执行大小限制。（2026-09-27 完成）
+- [x] 无文字层文件（扫描件）不再静默变成"ready 但 0 chunk"。（2026-09-27 完成，见事项十八）
+- [ ] 支持扫描件：在 Worker 内接入 OCR（Tesseract/PaddleOCR），或把无文字层文档转入人工处理队列。
+- [ ] 表格类文件（`.xls`/`.xlsx`）：需要行级序列化 + 每个 chunk 重复表头，否则数字找不到所属列名；
+      实测一份 54×6 的补贴测算表按换行分块后切成 3 个 chunk，列语义丢失。依赖上也缺 `openpyxl`/`xlrd`。
 - [ ] 校验文件 magic/MIME，并为 PDF/DOCX 解析设置超时、内存限制和任务 time limit。
 - [ ] 建立租户存储配额与原始文件清理/归档策略。
 - [x] Celery 使用原子状态迁移或分布式锁，防止两个 Worker 同时处理同一文档。（2026-09-27 完成）

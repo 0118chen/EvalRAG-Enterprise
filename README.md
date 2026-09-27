@@ -106,6 +106,19 @@ curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 - 外部连通检查（`/health/llm`、`/health/langsmith`）需要管理令牌，非开发环境未配置令牌时直接失败。
 - LangSmith Dataset 远端名称按租户命名空间隔离。
 
+## 支持的文档格式
+
+| 文件类型 | 处理方式 |
+|---|---|
+| `.pdf` | PyMuPDF 逐页抽取文本，页级分块，引用里带真实页码 |
+| `.docx` | python-docx 抽取段落；抽取结果只有一个逻辑页（页码恒为 1），所以 DOCX 的页级指标实际是文档级 |
+| `.txt` / `.md` | 先按 UTF-8 解码（带 BOM 时去掉 BOM），失败再按 GB18030/GBK 解码；两者都不是时带替换字符解码，而不是让整个文档失败 |
+| 其他（`.doc`、`.html`、`.xls`、`.xlsx`、图片等） | 上传时按扩展名直接返回 400 |
+
+白名单之外的类型被拒是因为它们各自需要额外依赖或专门的分块策略：`.doc`/`.xls` 需要额外的二进制解析器；表格的行列关系在按换行分块后会被破坏（数字找不到自己的列名，无法回答"某县补贴比例是多少"）；图片需要 OCR。**这条白名单只看扩展名**，所以下面这种情况能通过上传检查：
+
+扫描件或无文字层的 PDF：`extract_text` 会抽出 0 个字符，Worker 在抽取后立即检查可提取字符数，为 0 时抛 `EmptyExtractionError` 并把文档置为 `failed`，附原因 `N page(s), 0 extractable characters - likely a scanned document without a text layer (OCR required)`，`chunks=0`、不上报成功进度、不写任何索引；`GET /api/v1/documents/{id}` 返回该原因。该异常不参与 Celery 自动重试（任务注册里列为 `dont_autoretry_for`），因为"这份文件没有文字层"是文件的稳定属性，重试三次只是把同一个失败重复三遍。
+
 ## 本地开发
 
 创建后端环境：

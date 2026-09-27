@@ -123,3 +123,44 @@ def test_api_streams_upload_to_disk_and_queues_processing(tmp_path, monkeypatch)
         f"{document['id']}_policy.txt"
     ]
     assert (upload_dir / f"{document['id']}_policy.txt").read_bytes() == b"policy text"
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["scan.jpg", "screenshot.png", "old.doc", "page.html", "table.xls", "table.xlsx", "bundle.zip"],
+)
+def test_api_rejects_file_types_it_has_no_parser_for(tmp_path, monkeypatch, filename) -> None:
+    """Regression guard: the whitelist is the contract, and it is extension-only."""
+    client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
+
+    response = client.post(
+        "/api/v1/documents",
+        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
+        files={"file": (filename, b"payload", "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "supported file types: pdf, docx, txt, md"
+    assert queued == []
+    upload_dir = tmp_path / "data" / "uploads"
+    assert not upload_dir.exists() or list(upload_dir.glob("*")) == []
+
+
+def test_api_accepts_a_scanned_pdf_and_leaves_the_verdict_to_the_worker(
+    tmp_path, monkeypatch
+) -> None:
+    """Extension says PDF, content says picture.
+
+    The upload check cannot look inside the file, so an image-only PDF is queued
+    and the worker is the layer that fails it - with a reason the client can read.
+    """
+    client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
+
+    response = client.post(
+        "/api/v1/documents",
+        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
+        files={"file": ("scan.pdf", b"%PDF-1.7 scanned", "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert queued == [response.json()["id"]]
