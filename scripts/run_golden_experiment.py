@@ -163,6 +163,7 @@ def build_dataset(store, tenant_id: str, kb_id: str, by_filename: dict[str, str]
                 expected_answer=example["expected_answer"],
                 expected_document_id=by_filename[example["source_filename"]],
                 expected_page=example["page"],
+                evidence_quote=example["evidence_quote"],
                 category=example["category"],
             )
             for example in golden
@@ -270,6 +271,7 @@ def per_example(results: dict, golden_by_question: dict[str, dict]) -> list[dict
                 "recall_at_5": item["metrics"].get("recall_at_5"),
                 "page_hit": item["metrics"].get("page_hit"),
                 "quote_hit": any(quote in normalize(chunk.get("text", "")) for chunk in retrieved),
+                "passage_rank": item.get("passage_rank"),
                 "latency_ms": round(item["latency_ms"], 1),
                 "retrieved": [
                     {
@@ -285,7 +287,12 @@ def per_example(results: dict, golden_by_question: dict[str, dict]) -> list[dict
 
 
 def evidence_stats(results: dict, golden_by_question: dict[str, dict]) -> dict[str, float]:
-    """A retrieved chunk containing the ground-truth quote is the passage that answers it."""
+    """A retrieved chunk containing the ground-truth quote is the passage that answers it.
+
+    Deliberately re-implemented here rather than read from the evaluation results: the
+    product reports its own passage metrics, and two independent computations agreeing
+    is the cheapest available check that neither is wrong.
+    """
     exact = 0
     on_page = 0
     for item in results["examples"]:
@@ -383,6 +390,7 @@ def main() -> None:
             store, settings, retrieval_service, traces, args.tenant, kb_id, dataset, config
         )
         evidence = evidence_stats(results, golden_by_question)
+        product_passage = results["metrics"].get("passage_hit")
         entry = {
             "name": config["name"],
             "isolates": config["isolates"],
@@ -392,6 +400,8 @@ def main() -> None:
             "top_k": TOP_K,
             "metrics": results["metrics"],
             **evidence,
+            "passage_cross_check": product_passage is None
+            or abs(product_passage - evidence["evidence_quote_hit_rate"]) < 1e-9,
             "per_example": per_example(results, golden_by_question),
         }
         configs.append(entry)
@@ -401,7 +411,8 @@ def main() -> None:
             f"{config['name']:32} R@1={metrics.get('recall_at_1', 0):.3f} "
             f"R@3={metrics.get('recall_at_3', 0):.3f} R@5={metrics.get('recall_at_5', 0):.3f} "
             f"MRR={metrics.get('mrr', 0):.3f} nDCG@3={metrics.get('ndcg_at_3', 0):.3f} "
-            f"page={metrics.get('page_hit', 0):.3f} quote={entry['evidence_quote_hit_rate']:.3f} "
+            f"page={metrics.get('page_hit', 0):.3f} passage@1={metrics.get('passage_at_1', 0):.3f} "
+            f"quote={entry['evidence_quote_hit_rate']:.3f} "
             f"p50={metrics.get('latency_ms_p50', 0):.1f}ms"
         )
 
@@ -453,6 +464,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         ("nDCG@3", "ndcg_at_3"),
         ("nDCG@5", "ndcg_at_5"),
         ("page_hit", "page_hit"),
+        ("passage@1", "passage_at_1"),
+        ("passage_mrr", "passage_mrr"),
         ("quote_hit", "evidence_quote_hit_rate"),
         ("p50 ms", "latency_ms_p50"),
         ("p95 ms", "latency_ms_p95"),
