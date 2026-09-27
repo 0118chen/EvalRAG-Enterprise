@@ -198,6 +198,20 @@
 - `scripts/` 纳入 lint 门禁（`.github/workflows/ci.yml` 与 README 的验证命令），
   并修掉 `scripts/generate_golden_set.py` 的类型检查告警。
 
+### 事项十五：passage 级指标进入评测产品
+
+- 根因：文档级 recall 在 13 份文档的语料上饱和（BM25+重排全为 1.000），
+  而"答段是否排第一"在配置间的差距是 0.769 : 0.288——差异被聚合口径吃掉了。
+- 设计选择：给样例加可空的 `evidence_quote`（migration `0008`），
+  Runner 只对**带引文的样例**计算 `passage_hit`/`passage_at_1`/`passage_mrr`，
+  逐题结果里记 `passage_rank`；不带引文的老数据集指标含义不变。
+- 替代方案与取舍：另建一列 passage 标签表（结构更干净，但把"标注完整度"割裂到两张表）；
+  或把引文塞进 `expected_answer`（无需迁移，但污染答案字段且无法与答案长度解耦）。
+- 验证命令及结果：`pytest` 全量 126 passed；两处 RED 探针（弃掉存储写入、弃掉 Runner 计算）让断言分别失败；
+  重跑 `scripts.run_golden_experiment` 后平台 `passage@1` 与脚本侧独立实现逐位一致。
+- 仍存在的限制：引文仍是"命中该 chunk"的严格子串判定，未做片段级打分归一；
+  LangSmith 同步路径**刻意不上传文档内容**（`redact()` 边界），因此 passage 指标只在本地评测可用。
+
 ## P1：可靠性与安全
 
 - [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
@@ -242,8 +256,15 @@
   - 题集改造方向：提问不点名法规、同义改写（"贷款期限"→"借多久"）、跨文档多跳、
     引入真正相近的干扰文档、加入应拒答的负样本。
   - 复跑命令：`python -m scripts.probe_golden_difficulty --database data/experiments/golden.db --tenant golden-experiment`
-- [ ] 把"证据引文命中"做成产品内指标（`evaluation_example` 增 `evidence_quote`），
-  目前它是脚本侧派生指标（`scripts/run_golden_experiment.py`），不进评测接口。
+- [x] 把"证据引文命中"做成产品内指标（`evaluation_example` 增 `evidence_quote`）。（2026-09-27 完成）
+  - 设计：`EvaluationExampleCreate.evidence_quote`（可空）→ `evaluation_examples.evidence_quote`（migration 0008）
+    → Runner 对**带引文的样例**计算 `passage_hit`/`passage_at_1`/`passage_mrr`，逐题结果里记 `passage_rank`。
+  - 取舍：没有引文的样例不参与 passage 均值（不稀释到 0），因此老数据集加上新字段后指标含义不变；
+    引文比对前先去掉所有空白，避免与分块时的空白折叠冲突；空引文一律视为"无证据"而不是"全命中"。
+  - 新增测试：`tests/test_evaluation.py`（排名/空白/空引文边界）、`tests/test_evaluation_runner.py`
+    （聚合只在标注样例上平均）、`tests/test_evaluation_api.py`（引文经 API 往返并进入指标）。
+  - 验证：两处 RED 探针（掐掉存储写入、掐掉 Runner 计算）分别让断言失败；全量 126 passed。
+  - 交叉校验：脚本侧独立算一遍引文命中率，与产品指标逐位一致（`passage_cross_check`）。
 - [ ] 评测 Runner 增加有界并发、单样例超时、进度、checkpoint、失败样例重试和取消能力。
 - [ ] 接入标准 Prometheus Histogram/Counter，并覆盖 Cache、Retrieval、Celery、DB Pool 指标。
 - [ ] LangSmith 关闭时将 Trace 持久化到结构化日志、数据库或 OpenTelemetry Collector。

@@ -23,9 +23,11 @@
 
 ### 阶段三：离线评测
 
-- 持久化评测数据集，每个样例包含问题、期望文档、页码和类别。
+- 持久化评测数据集，每个样例包含问题、期望文档、页码、证据引文和类别。
 - 本地 Experiment 一次检索同时计算 Recall@{1,3,5}、Precision@K、MRR、nDCG@{3,5} 和页码命中率，
   并给出 `latency_ms_p50/p95`（同一排名算多个截断点，避免重跑导致的候选池变化）。
+- 带证据引文的样例额外计算 passage 级指标（`passage_hit`/`passage_at_1`/`passage_mrr` 与每题 `passage_rank`）：
+  文档级指标在少量文档上会饱和，passage 级才能看出"答段排在第几"。
 - Celery 异步执行实验，结果保存到数据库；每条 retrieved 记录带 `chunk_id` 与 `text`，结果可复核。
 - 可选同步 Dataset 到 LangSmith，并使用 LangSmith `evaluate` 执行 Experiment。
 - CLI 支持运行实验和同步 Dataset。
