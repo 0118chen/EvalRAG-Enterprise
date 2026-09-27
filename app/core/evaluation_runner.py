@@ -10,10 +10,11 @@ from app.config import Settings
 from app.core.answer_evaluation import judge_answer
 from app.core.evaluation import (
     RetrievalExample,
+    evidence_targets,
     latency_percentiles,
     metrics_at_k,
     passage_metrics,
-    passage_rank,
+    passage_ranks,
 )
 from app.core.langsmith_eval import LangSmithEvaluationAdapter
 from app.core.observability import TraceManager
@@ -99,9 +100,18 @@ class EvaluationRunner:
                 aggregate = {
                     key: fmean(values)
                     for key, values in metric_values.items()
-                    if values
+                    if values and key != "retrieved_something"
                 }
                 aggregate["example_count"] = len(examples)
+                refusal_examples = [item for item in examples if item["should_refuse"]]
+                aggregate["answerable_example_count"] = len(examples) - len(refusal_examples)
+                aggregate["refusal_example_count"] = len(refusal_examples)
+                if refusal_examples:
+                    # Kept out of every retrieval metric above: a question the corpus
+                    # cannot answer has no correct document to find.
+                    aggregate["negative_retrieved_rate"] = fmean(
+                        item["metrics"]["retrieved_something"] for item in refusal_examples
+                    )
                 latencies = [item["latency_ms"] for item in examples]
                 aggregate["latency_ms"] = fmean(latencies)
                 percentiles = latency_percentiles(latencies)
@@ -183,9 +193,10 @@ class EvaluationRunner:
                     chunk.document_id
                     for chunk, _ in metric_results
                 ]
+                targets = evidence_targets(example)
                 metric_example = RetrievalExample(
                     question=example.question,
-                    expected_document_id=example.expected_document_id,
+                    expected_document_id=[target.document_id for target in targets],
                     retrieved_document_ids=retrieved_ids,
                 )
                 cutoffs = tuple(
@@ -195,27 +206,36 @@ class EvaluationRunner:
                         if 0 < k <= evaluation["top_k"]
                     )
                 )
-                metrics = metrics_at_k(metric_example, cutoffs)
-                page_hit = any(
-                    chunk.document_id == example.expected_document_id
-                    and (
-                        example.expected_page is None
-                        or chunk.page == example.expected_page
-                    )
-                    for chunk, _ in metric_results
-                )
-                metrics["page_hit"] = float(page_hit)
-                passage_rank_value: int | None = None
-                if example.evidence_quote:
-                    retrieved_texts = [chunk.text for chunk, _ in metric_results]
-                    passage_rank_value = passage_rank(
-                        retrieved_texts, example.evidence_quote
+                retrieved_texts = [chunk.text for chunk, _ in metric_results]
+                passage_rank_values: list[int | None] = []
+                if targets:
+                    metrics = metrics_at_k(metric_example, cutoffs)
+                    metrics["page_hit"] = float(
+                        all(
+                            any(
+                                chunk.document_id == target.document_id
+                                and (target.page is None or chunk.page == target.page)
+                                for chunk, _ in metric_results
+                            )
+                            for target in targets
+                        )
                     )
                     # Only annotated examples carry these keys, so the aggregate averages
                     # over the examples that actually hold ground truth.
-                    metrics.update(
-                        passage_metrics(retrieved_texts, example.evidence_quote)
+                    passage_rank_values = passage_ranks(
+                        retrieved_texts, [target.quote for target in targets]
                     )
+                    metrics.update(
+                        passage_metrics(
+                            retrieved_texts, [target.quote for target in targets]
+                        )
+                    )
+                else:
+                    # An unanswerable example: retrieval is only allowed to stay empty.
+                    # This is a false-positive proxy - grading an actual refusal needs the
+                    # answer path, which is why the number is reported separately instead
+                    # of folded into recall.
+                    metrics = {"retrieved_something": float(bool(metric_results))}
                 generated_answer: str | None = None
                 judge_reason: str | None = None
                 if answer_evaluation:
@@ -248,6 +268,8 @@ class EvaluationRunner:
                     "expected_document_id": example.expected_document_id,
                     "expected_page": example.expected_page,
                     "expected_answer": example.expected_answer,
+                    "should_refuse": bool(example.should_refuse),
+                    "expected_documents": [target.document_id for target in targets],
                     "generated_answer": generated_answer,
                     "judge_reason": judge_reason,
                     "retrieved": [
@@ -262,7 +284,8 @@ class EvaluationRunner:
                         for chunk, score in metric_results
                     ],
                     "metrics": metrics,
-                    "passage_rank": passage_rank_value,
+                    "passage_rank": passage_rank_values[0] if passage_rank_values else None,
+                    "passage_ranks": passage_rank_values,
                     "cache_hit": retrieved.cache_hit,
                     "rewritten_queries": retrieved.rewritten_queries,
                     "latency_ms": (perf_counter() - started) * 1000,

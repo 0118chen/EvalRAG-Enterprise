@@ -25,6 +25,7 @@ from app.schemas import (
     Document,
     EvaluationDataset,
     EvaluationExample,
+    EvidenceSpan,
     KnowledgeBase,
 )
 
@@ -366,6 +367,15 @@ class SQLAlchemyStore:
                         expected_page=example.expected_page,
                         evidence_quote=example.evidence_quote,
                         category=example.category,
+                        should_refuse=example.should_refuse,
+                        expected_evidence_json=(
+                            json.dumps(
+                                [span.model_dump() for span in example.expected_evidence],
+                                ensure_ascii=False,
+                            )
+                            if example.expected_evidence
+                            else None
+                        ),
                     )
                     for example in dataset.examples
                 ]
@@ -607,6 +617,15 @@ class SQLAlchemyStore:
                     expected_page=example.expected_page,
                     evidence_quote=example.evidence_quote,
                     category=example.category,
+                    should_refuse=bool(example.should_refuse),
+                    expected_evidence=[
+                        EvidenceSpan(**span)
+                        for span in (
+                            json.loads(example.expected_evidence_json)
+                            if example.expected_evidence_json
+                            else []
+                        )
+                    ],
                 )
                 for example in examples
             ],

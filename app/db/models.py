@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -76,10 +76,13 @@ class EvaluationExampleRecord(Base):
     dataset_id: Mapped[str] = mapped_column(ForeignKey("evaluation_datasets.id"), index=True)
     question: Mapped[str] = mapped_column(Text)
     expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    expected_document_id: Mapped[str] = mapped_column(String(36), index=True)
+    expected_document_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     expected_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     evidence_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(100), default="general")
+    should_refuse: Mapped[bool] = mapped_column(Boolean, default=False)
+    # JSON list of {"document_id", "page", "quote"} hops; read whole, never filtered in SQL.
+    expected_evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class EvaluationRecord(Base):

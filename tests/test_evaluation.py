@@ -4,7 +4,7 @@ from app.core.evaluation import (
     latency_percentiles,
     metrics_at_k,
     passage_metrics,
-    passage_rank,
+    passage_ranks,
     recall_at_k,
     reciprocal_rank,
 )
@@ -58,14 +58,16 @@ def test_latency_percentiles_use_nearest_rank() -> None:
 def test_passage_rank_locates_the_answering_chunk() -> None:
     retrieved = ["header of the regulation", "loan   policy\neffective date", "appendix"]
 
-    assert passage_rank(retrieved, "loan policy effective date") == 2
-    assert passage_rank(retrieved, "not in any chunk") is None
+    assert passage_ranks(retrieved, "loan policy effective date") == [2]
+    assert passage_ranks(retrieved, "not in any chunk") == [None]
 
 
 def test_passage_rank_treats_an_empty_quote_as_no_evidence() -> None:
     # An empty quote must never match: it would report a perfect score for nothing.
-    assert passage_rank(["anything"], "") is None
-    assert passage_rank(["anything"], "   ") is None
+    assert passage_ranks(["anything"], "") == []
+    assert passage_ranks(["anything"], "   ") == []
+    # Nothing to judge means no keys at all, so the aggregate cannot average it in.
+    assert passage_metrics(["anything"], "") == {}
 
 
 def test_passage_metrics_reward_finding_the_passage_and_ranking_it_first() -> None:

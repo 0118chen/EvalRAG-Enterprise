@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 RetrievalMode = Literal["dense", "sparse", "hybrid"]
 VERSION_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
@@ -80,13 +80,46 @@ class EvaluationCreate(BaseModel):
     answer_evaluation: bool = False
 
 
+class EvidenceSpan(BaseModel):
+    """One hop of the ground truth: where the answer lives and the sentence that shows it."""
+
+    document_id: str = Field(min_length=1, max_length=128)
+    page: int | None = Field(default=None, ge=1)
+    quote: str | None = Field(default=None, max_length=4000)
+
+
 class EvaluationExampleCreate(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     expected_answer: str | None = Field(default=None, max_length=4000)
-    expected_document_id: str = Field(min_length=1, max_length=128)
+    # Optional so an unanswerable example can have no document at all; the validator
+    # below makes the two consistent.
+    expected_document_id: str | None = Field(default=None, max_length=128)
     expected_page: int | None = Field(default=None, ge=1)
     evidence_quote: str | None = Field(default=None, max_length=4000)
     category: str = Field(default="general", max_length=100)
+    # A question the corpus cannot answer: scored on whether the system declines, not on recall.
+    should_refuse: bool = False
+    # Multi-hop questions list every hop here, each with its own quote.
+    expected_evidence: list[EvidenceSpan] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_labels(self) -> "EvaluationExampleCreate":
+        if self.should_refuse:
+            if self.expected_document_id or self.expected_evidence:
+                raise ValueError(
+                    "a should_refuse example must not carry expected evidence: "
+                    "there is nothing in the corpus to point at"
+                )
+            return self
+        if not self.expected_document_id and not self.expected_evidence:
+            raise ValueError("expected_document_id or expected_evidence is required")
+        first = self.expected_evidence[0].document_id if self.expected_evidence else None
+        if first and self.expected_document_id and first != self.expected_document_id:
+            raise ValueError(
+                "expected_document_id must match the first expected_evidence hop, "
+                f"got {self.expected_document_id!r} and {first!r}"
+            )
+        return self
 
 
 class EvaluationDatasetCreate(BaseModel):
