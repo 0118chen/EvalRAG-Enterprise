@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 120
     query_rewrite_enabled: bool = True
     rerank_enabled: bool = True
+    rerank_backend: str = "lexical"
+    # TypeSafe is the semantic second stage: one typed Noul judgment per (query, candidate)
+    # pair, scored by a model that reads both. Off unless a key is configured, because it is
+    # a paid third-party call and it sends the candidate text to them (see docs §11).
+    typesafe_api_key: str | None = None
+    typesafe_base_url: str = "https://api.typesafe.ai"
+    typesafe_model: str = "jev-latest"
+    typesafe_concurrency: int = 8
     retrieval_candidate_multiplier: int = 4
     evaluation_inline_fallback: bool = False
     max_upload_mb: int = 50

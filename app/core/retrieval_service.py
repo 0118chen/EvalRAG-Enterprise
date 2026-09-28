@@ -11,7 +11,7 @@ from app.core.ingestion import Chunk
 from app.core.observability import TraceManager
 from app.core.query_rewrite import QueryRewriter
 from app.core.reranking import Reranker
-from app.core.retrieval import reciprocal_rank_fusion
+from app.core.retrieval import fusion_from_name, reciprocal_rank_fusion
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,7 @@ class RetrievalService:
         document_version: str | None = "latest",
         rerank: bool | None = None,
         query_rewrite: bool | None = None,
+        fusion: str | None = None,
     ) -> RetrievalResult:
         use_rerank = self.settings.rerank_enabled if rerank is None else rerank
         use_rewrite = (
@@ -147,6 +148,7 @@ class RetrievalService:
                 mode,
                 knowledge_base_id,
                 document_version,
+                fusion,
             )
             with self.traces.span(
                 "retrieval.rank",
@@ -215,6 +217,7 @@ class RetrievalService:
         mode: str,
         knowledge_base_id: str,
         document_version: str | None,
+        fusion: str | None = None,
     ) -> Retriever:
         return create_retriever(
             self.settings,
@@ -222,4 +225,5 @@ class RetrievalService:
             mode,
             knowledge_base_id,
             document_version,
+            fusion_from_name(fusion) if fusion else None,
         )

@@ -19,7 +19,7 @@ from app.config import Settings
 from app.core.embeddings import EmbeddingProvider, create_embedding, embed_text
 from app.core.errors import BackendUnavailableError
 from app.core.ingestion import Chunk
-from app.core.retrieval import cosine_similarity, reciprocal_rank_fusion, retrieve
+from app.core.retrieval import Fusion, cosine_similarity, fuse_rankings, retrieve
 
 logger = logging.getLogger(__name__)
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -42,11 +42,13 @@ class HybridRetriever:
 
     dense: Retriever
     sparse: Retriever
-    fusion_k: int = 60
+    fusion: Fusion | None = None
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         dense_results, sparse_results = await asyncio.gather(self.dense.search(query, top_k), self.sparse.search(query, top_k))
-        return reciprocal_rank_fusion(dense_results, sparse_results, k=self.fusion_k, top_k=top_k)
+        # `fusion=None` keeps the shipped equal-weight RRF; the spec carries k, weights
+        # and the per-channel cap that the fusion experiments vary.
+        return fuse_rankings(dense_results, sparse_results, self.fusion or Fusion(), top_k)
 
 
 @dataclass
@@ -69,6 +71,7 @@ class LocalRetriever:
     chunks: list[Chunk]
     mode: str = "hybrid"
     embedding: EmbeddingProvider | None = None
+    fusion: Fusion | None = None
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         if self.mode == "sparse":
@@ -86,7 +89,7 @@ class LocalRetriever:
         if self.mode == "dense":
             return dense[:top_k]
         sparse = retrieve(query, self.chunks, top_k, "sparse")
-        return reciprocal_rank_fusion(dense, sparse, top_k=top_k)
+        return fuse_rankings(dense, sparse, self.fusion or Fusion(), top_k)
 
 
 @dataclass
@@ -234,6 +237,7 @@ def create_retriever(
     mode: str,
     knowledge_base_id: str,
     document_version: str | None,
+    fusion: Fusion | None = None,
 ) -> Retriever:
     embedding = create_embedding(settings)
     local_dense = LocalRetriever(chunks, "dense", embedding)
@@ -276,4 +280,4 @@ def create_retriever(
         return dense
     if mode == "sparse":
         return sparse
-    return HybridRetriever(dense, sparse)
+    return HybridRetriever(dense, sparse, fusion)

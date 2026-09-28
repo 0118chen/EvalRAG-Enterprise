@@ -74,12 +74,31 @@ python -m scripts.run_golden_experiment --golden law/golden_eval_v3.json \
     --database data/experiments/golden-v3.db
 ```
 
+融合实验（10 组配置：等权 RRF 之外加了加权、截断、分数式 convex 三种修法）：
+
+```bash
+for s in v1 v2 v3; do
+  python -m scripts.run_golden_experiment --golden law/golden_eval_$s.json \
+      --json docs/evaluation/golden-set-$s-fusion-2026-09-28.json \
+      --markdown docs/evaluation/golden-set-$s-fusion-2026-09-28.md \
+      --database data/experiments/golden-$s-fusion.db
+done
+# 机制归因：每种融合把谁的页级第一名挤掉了、救回了多少（走产品路径复现）
+python -m scripts.probe_fusion --database data/experiments/golden-v2-fusion.db \
+    --golden law/golden_eval_v2.json
+```
+
 结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
 v1 标注 52/52 可回验，但指标已饱和（18 份语料上**纯 BM25** 就在文档级/页级拿满分，重排增益归零），
 且本地 32 维 hash 向量使 hybrid 反而低于纯 BM25；v2 去掉"问题里报法规名"的词面泄漏后
 指标明显下降（R@1 1.000 → 0.660），两种题集的对照见该报告 §8，
 两轮语料（13 份 / 18 份）的对照与逐题归因见 §9，给新增 5 份文档补题后的结果见 §10
-（BM25 R@1 0.800、表格类 4/4 全中——扩语料没有把新格式落下）。
+（BM25 R@1 0.800、表格类 4/4 全中——扩语料没有把新格式落下）。**§11** 是"混合检索为什么
+没提升"的机制归因与修法：页级探针数出等权融合"挤掉 19 道 / 救回 2 道"，改成**分数式 + 加权**
+后 v3 上首次超过纯 BM25；同一轮还查出并修掉"平局胜负由导入顺序决定"的不可复现缺陷
+（同一配置跑出过 0.550 与 0.700），并给语义重排（TypeSafe，可选后端、默认关闭）接上
+用量与花费记账——难集 R@1 0.646 → **0.769**（单跳 37/52 → 45/52，纯 BM25 是 38/52），
+v3 0.850 → **0.950**（page_hit 1.000）；多跳题一道没涨，因为重排改不了候选集。
 
 ```bash
 python -m app.cli run-evaluation <evaluation_id>

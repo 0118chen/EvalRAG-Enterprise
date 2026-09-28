@@ -63,6 +63,50 @@ CONFIGS: list[dict[str, Any]] = [
         "isolates": "RRF fusion of both channels, no rerank",
     },
     {
+        "name": "hybrid-rrf-weighted",
+        "retrieval_mode": "hybrid",
+        "rerank": False,
+        "query_rewrite": False,
+        "fusion": "rrf-bm25-heavy",
+        "isolates": "equal-weight fusion was the problem: weight the weak dense channel down",
+    },
+    {
+        "name": "hybrid-rrf-truncate",
+        "retrieval_mode": "hybrid",
+        "rerank": False,
+        "query_rewrite": False,
+        "fusion": "rrf-truncate-5",
+        "isolates": "only the top 5 of each channel may contribute, not its tail",
+    },
+    {
+        "name": "hybrid-convex",
+        "retrieval_mode": "hybrid",
+        "rerank": False,
+        "query_rewrite": False,
+        "fusion": "convex",
+        "isolates": "keep the score magnitudes RRF throws away (min-max normalised sum)",
+    },
+    {
+        "name": "hybrid-convex-weighted",
+        "retrieval_mode": "hybrid",
+        "rerank": False,
+        "query_rewrite": False,
+        "fusion": "convex-bm25-heavy",
+        "isolates": "normalised scores plus a down-weighted dense channel",
+    },
+    {
+        "name": "hybrid-convex-weighted-rerank",
+        "retrieval_mode": "hybrid",
+        "rerank": True,
+        "query_rewrite": False,
+        "fusion": "convex-bm25-heavy",
+        "isolates": (
+            "the same shortlist through the reranker; which backend that is depends on "
+            "RERANK_BACKEND, so this config name is the apples-to-apples slot for comparing "
+            "lexical against TypeSafe"
+        ),
+    },
+    {
         "name": "hybrid-rrf-rerank",
         "retrieval_mode": "hybrid",
         "rerank": True,
@@ -77,6 +121,30 @@ CONFIGS: list[dict[str, Any]] = [
         "isolates": "rule-based query expansion on top of the product default",
     },
 ]
+
+
+# TypeSafe's published price (https://docs.typesafe.ai/models): $42 per billion input tokens,
+# output tokens free. The per-call token count is measured, not guessed: 427,239 input tokens
+# over 400 calls on the v3 run (2026-09-28) = 1068 per call. It feeds the pre-flight estimate
+# only - the report always carries the totals the API actually returned. (A first guess of 398
+# came from a hand-written smoke prompt whose "candidates" were one short sentence each; real
+# chunks are ~800 characters, i.e. ~2.7x more tokens.)
+TYPESAFE_USD_PER_MTOK = 0.042
+TYPESAFE_TOKENS_PER_CALL = 1068
+
+
+def rerank_usage_totals(usage: list[dict]) -> dict[str, Any]:
+    """Token and cost totals for the paid rerank backend (empty when it is not in use)."""
+    input_tokens = sum(item["usage"].get("input_tokens", 0) for item in usage)
+    output_tokens = sum(item["usage"].get("output_tokens", 0) for item in usage)
+    return {
+        "calls": len(usage),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "model": usage[0]["model"] if usage else None,
+        "cost_usd": round(input_tokens / 1_000_000 * TYPESAFE_USD_PER_MTOK, 6),
+        "price_note": "input tokens only, $42/Btok, https://docs.typesafe.ai/models",
+    }
 
 
 def normalize(text: str) -> str:
@@ -309,6 +377,7 @@ def run_config(
             "document_version": "latest",
             "rerank": config["rerank"],
             "query_rewrite": config["query_rewrite"],
+            "fusion": config.get("fusion"),
             "answer_evaluation": False,
         },
     )
@@ -453,6 +522,19 @@ def category_table(rows: list[dict]) -> dict[str, dict[str, float]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--configs",
+        default=None,
+        help=(
+            "comma-separated subset of CONFIGS names to run (default: all). Needed for the "
+            "paid rerank backends, where running the whole matrix would be 10x the cost."
+        ),
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="skip the confirmation prompt when the estimated TypeSafe spend is large",
+    )
     parser.add_argument("--database", default="data/experiments/golden.db")
     parser.add_argument("--tenant", default="golden-experiment")
     parser.add_argument("--knowledge-base", default="rural-finance-regulations")
@@ -467,6 +549,17 @@ def main() -> None:
     )
     args = parser.parse_args()
     golden_path = args.golden if args.golden.is_absolute() else ROOT / args.golden
+
+    # 先校验配置名：写错一个字母就该立刻失败，而不是等语料导入（约一分钟）跑完才报错。
+    selected = CONFIGS
+    if args.configs:
+        wanted = [name.strip() for name in args.configs.split(",") if name.strip()]
+        known = {config["name"] for config in CONFIGS}
+        unknown = [name for name in wanted if name not in known]
+        if unknown:
+            raise SystemExit(f"unknown config name(s): {unknown}; known: {sorted(known)}")
+        selected = [config for config in CONFIGS if config["name"] in wanted]
+        print(f"限定配置：{[config['name'] for config in selected]}\n")
 
     database = ROOT / args.database
     if database.exists() and not args.keep_database:
@@ -509,18 +602,40 @@ def main() -> None:
     print(f"dataset {dataset.name}: {len(dataset.examples)} examples\n")
 
     traces = TraceManager(settings)
+    # 付费后端的 token 用量收集器：只有 RERANK_BACKEND/typesafe 会往里写，
+    # 跑完写进报告，免得"花了多少钱"只能靠事后估。
+    rerank_usage: list[dict] = []
     retrieval_service = RetrievalService(
         settings,
         traces,
         create_cache(settings),
         create_query_rewriter(settings),
-        create_reranker(settings),
+        create_reranker(settings, usage_sink=rerank_usage),
     )
+
+    # 一次 rerank 请求对应一个候选，所以"题数 x 候选数 x rerank 配置数"就是调用次数。
+    rerank_configs = [config for config in selected if config["rerank"]]
+    per_question = max(TOP_K, TOP_K * settings.retrieval_candidate_multiplier)
+    expected_calls = len(dataset.examples) * per_question * len(rerank_configs)
+
+    if settings.rerank_backend == "typesafe":
+        # 付费调用先报账再动手：实测每次约 398 输入 token（scratch/ts_smoke.py 的真实调用），
+        # 单价见 https://docs.typesafe.ai/models
+        calls = expected_calls
+        estimate = calls * TYPESAFE_TOKENS_PER_CALL * TYPESAFE_USD_PER_MTOK / 1_000_000
+        print(
+            f"TypeSafe 预估：{len(rerank_configs)} 个 rerank 配置 x {len(dataset.examples)} 题 x "
+            f"{per_question} 候选 = {calls} 次请求，约 ${estimate:.4f}\n"
+        )
+        if estimate > 0.10 and not args.yes:
+            answer = input(f"预计花费 ${estimate:.2f}，继续？[y/N] ")
+            if answer.strip().lower() not in {"y", "yes"}:
+                raise SystemExit("已取消（要跳过确认加 --yes）")
 
     configs: list[dict[str, Any]] = []
     last_results: dict | None = None
     last_config: dict | None = None
-    for config in CONFIGS:
+    for config in selected:
         results = run_config(
             store, settings, retrieval_service, traces, args.tenant, kb_id, dataset, config
         )
@@ -532,6 +647,7 @@ def main() -> None:
             "retrieval_mode": config["retrieval_mode"],
             "rerank": config["rerank"],
             "query_rewrite": config["query_rewrite"],
+            "fusion": config.get("fusion"),
             "top_k": TOP_K,
             "metrics": results["metrics"],
             **evidence,
@@ -553,6 +669,19 @@ def main() -> None:
             f"p50={metrics.get('latency_ms_p50', 0):.1f}ms"
         )
 
+    usage_totals = rerank_usage_totals(rerank_usage)
+    # TypeSafe 失败会静默回退到词面重排，而回退不发请求——所以"实际调用数"必须和
+    # "题数 x 候选数 x rerank 配置数"对得上；对不上就说明这批数字不是 TypeSafe 给的。
+    usage_totals["expected_calls"] = expected_calls
+    usage_totals["degraded"] = settings.rerank_backend == "typesafe" and (
+        usage_totals["calls"] < expected_calls
+    )
+    if usage_totals["degraded"]:
+        print(
+            f"!!! 警告：TypeSafe 只发出 {usage_totals['calls']} 次请求（预期 {expected_calls}），"
+            "说明部分问题回退到了词面重排——这批数字不能当成语义重排的结果\n"
+        )
+
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
         "git_commit": git_commit(),
@@ -571,6 +700,8 @@ def main() -> None:
             ),
             "top_k": TOP_K,
         },
+        "rerank_backend": settings.rerank_backend,
+        "rerank_usage": usage_totals,
         "embedding": {
             "provider": settings.embedding_provider,
             "dimensions": settings.embedding_dimensions,
@@ -628,6 +759,16 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"sparse={report['embedding']['sparse_backend']}  "
         ),
         f"- top_k: {report['dataset']['top_k']}  ",
+        f"- rerank backend: `{report['rerank_backend']}`"
+        + (
+            f" (TypeSafe, {report['rerank_usage']['calls']}/{report['rerank_usage']['expected_calls']} "
+            f"calls, {report['rerank_usage']['input_tokens']} input tokens, "
+            f"${report['rerank_usage']['cost_usd']}"
+            + ("，**有回退，数字不可信**" if report["rerank_usage"]["degraded"] else "")
+            + ")  "
+            if report["rerank_usage"]["calls"]
+            else "  "
+        ),
         (
             f"- random 5-chunk draw: document hit {report['reference']['random_document_hit_at_5']:.3f}, "
             f"page hit {report['reference']['random_page_hit_at_5']:.3f} "

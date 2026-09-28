@@ -60,6 +60,7 @@ class EvaluationRunner:
         document_version = parameters.get("document_version", "latest")
         rerank = parameters.get("rerank")
         query_rewrite = parameters.get("query_rewrite")
+        fusion = parameters.get("fusion")
         answer_evaluation = bool(parameters.get("answer_evaluation", False))
         if answer_evaluation and self.llm is None:
             raise ValueError("LLM is required for answer evaluation")
@@ -96,6 +97,7 @@ class EvaluationRunner:
                     rerank,
                     query_rewrite,
                     answer_evaluation,
+                    fusion,
                 )
                 aggregate = {
                     key: fmean(values)
@@ -133,6 +135,7 @@ class EvaluationRunner:
                     rerank,
                     query_rewrite,
                     answer_evaluation,
+                    fusion,
                 )
                 results = {
                     "metrics": aggregate,
@@ -168,6 +171,7 @@ class EvaluationRunner:
         rerank: bool | None,
         query_rewrite: bool | None,
         answer_evaluation: bool,
+        fusion: str | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, list[float]]]:
         examples: list[dict[str, Any]] = []
         metric_values: dict[str, list[float]] = {}
@@ -194,6 +198,7 @@ class EvaluationRunner:
                     document_version=document_version,
                     rerank=rerank,
                     query_rewrite=query_rewrite,
+                    fusion=fusion,
                 )
                 metric_results = retrieved.results[:evaluation["top_k"]]
                 retrieved_ids = [
@@ -314,6 +319,7 @@ class EvaluationRunner:
         rerank: bool | None,
         query_rewrite: bool | None,
         answer_evaluation: bool,
+        fusion: str | None = None,
     ) -> dict[str, Any] | None:
         if not self.langsmith or not self.langsmith.enabled:
             return None
@@ -334,6 +340,7 @@ class EvaluationRunner:
                 document_version=document_version,
                 rerank=rerank,
                 query_rewrite=query_rewrite,
+                fusion=fusion,
             )
             outputs = {
                 "document_ids": [chunk.document_id for chunk, _ in result.results],

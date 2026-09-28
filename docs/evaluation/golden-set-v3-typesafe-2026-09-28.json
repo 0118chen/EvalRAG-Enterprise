@@ -1,0 +1,3300 @@
+{
+  "generated_at": "2026-09-28T11:52:14.428990+00:00",
+  "git_commit": "56db26f",
+  "corpus": {
+    "documents": 18,
+    "chunks": 386,
+    "versions": [
+      "latest"
+    ]
+  },
+  "dataset": {
+    "name": "rural-finance-regulations-golden",
+    "examples": 20,
+    "source": "law\\golden_eval_v3.json",
+    "top_k": 5
+  },
+  "rerank_backend": "typesafe",
+  "rerank_usage": {
+    "calls": 400,
+    "input_tokens": 427239,
+    "output_tokens": 8400,
+    "model": "jev-1.13.0",
+    "cost_usd": 0.017944,
+    "price_note": "input tokens only, $42/Btok, https://docs.typesafe.ai/models",
+    "expected_calls": 400,
+    "degraded": false
+  },
+  "embedding": {
+    "provider": "hash",
+    "dimensions": 32,
+    "dense_backend": "local",
+    "sparse_backend": "local"
+  },
+  "configs": [
+    {
+      "name": "sparse-bm25",
+      "isolates": "BM25 only, the no-frills baseline",
+      "retrieval_mode": "sparse",
+      "rerank": false,
+      "query_rewrite": false,
+      "fusion": null,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.85,
+        "recall_at_1": 0.8,
+        "all_targets_at_1": 0.8,
+        "ndcg_at_1": 0.8,
+        "precision_at_1": 0.8,
+        "recall_at_3": 0.85,
+        "all_targets_at_3": 0.85,
+        "ndcg_at_3": 0.8315464876785729,
+        "precision_at_3": 0.6333333333333333,
+        "recall_at_5": 0.95,
+        "all_targets_at_5": 0.95,
+        "ndcg_at_5": 0.8746141434859123,
+        "precision_at_5": 0.51,
+        "page_hit": 0.9,
+        "passage_hit": 0.85,
+        "passage_at_1": 0.7,
+        "passage_mrr": 0.775,
+        "example_count": 20,
+        "answerable_example_count": 20,
+        "refusal_example_count": 0,
+        "all_mode_example_count": 20,
+        "any_mode_example_count": 0,
+        "latency_ms": 790.6115550082177,
+        "latency_ms_p50": 748.142900003586,
+        "latency_ms_p95": 966.6982000344433
+      },
+      "evidence_quote_hit_rate": 0.85,
+      "answerable_examples": 20,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "地方财政部门或承保机构能不能找保险中介来帮农户签中央财政补贴险种的合同？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 17,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 185.7092,
+          "latency_ms": 930.7,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 185.7092
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 9,
+              "score": 123.1104
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 14,
+              "score": 117.0514
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 10,
+              "score": 110.4941
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 11,
+              "score": 110.4026
+            }
+          ]
+        },
+        {
+          "question": "出借人和借款人既约定了逾期利率，又约定了违约金或其他费用，出借人能不能一起要？总共超过多少的部分法院不支持？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 205.6477,
+          "latency_ms": 1010.4,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 205.6477
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 204.1671
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 85.724
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 63.3563
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 61.3024
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，如果它给关联方做了担保，最晚要在多少天内向监管部门报告？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 68.5303,
+          "latency_ms": 739.5,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 68.5303
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 44.0276
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 41.9196
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 37.2389
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 34.1299
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，它给同一家客户的担保余额最多能占自己净资产的多少？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 67.0435,
+          "latency_ms": 883.5,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 67.0435
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 42.3931
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 4,
+              "score": 40.0085
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 37.4223
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 33.8995
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第51位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 21.8319,
+          "latency_ms": 669.0,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 21.8319
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 8.6665
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 8.6234
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 7,
+              "score": 5.6725
+            },
+            {
+              "document_id": "10fdd04a-a70a-40a4-b849-73c2f69438f0",
+              "page": 3,
+              "score": 5.3952
+            }
+          ]
+        },
+        {
+          "question": "一家承保机构要拿到农户自己交的那部分保费之后，才能做什么？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 19,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 47.1767,
+          "latency_ms": 740.4,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 47.1767
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 45.9421
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 10,
+              "score": 40.3558
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 18,
+              "score": 35.282
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 16,
+              "score": 34.8151
+            }
+          ]
+        },
+        {
+          "question": "一家承保机构在拟定农业保险的费率和条款时，综合费用率最高不能超过多少？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 7,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 94.4921,
+          "latency_ms": 836.8,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 7,
+              "score": 94.4921
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 62.8329
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 62.7844
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 9,
+              "score": 52.4361
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 22,
+              "score": 52.3507
+            }
+          ]
+        },
+        {
+          "question": "一家做融资担保的公司，出了重大负面舆情这类风险事件，最晚多久要报告？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 77.4818,
+          "latency_ms": 810.8,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 77.4818
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 10,
+              "score": 65.4202
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 61.6863
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 4,
+              "score": 45.859
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 42.7874
+            }
+          ]
+        },
+        {
+          "question": "一家做小额贷款的公司，想在本市开张做金融业务，得先拿到什么才能干？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 45.8225,
+          "latency_ms": 706.4,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 45.8225
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 3,
+              "score": 43.2178
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 42.7025
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 2,
+              "score": 42.5246
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 4,
+              "score": 40.5688
+            }
+          ]
+        },
+        {
+          "question": "承保机构在跟被保险人谈好赔多少钱之后，最晚多少天内必须把保险金付给对方？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 19,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 94.3862,
+          "latency_ms": 802.6,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 94.3862
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 14,
+              "score": 37.895
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 11,
+              "score": 36.468
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 8,
+              "score": 35.1043
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 34.3631
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，如果它想跨省开一家分公司，它的注册资本至少要有多少？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 4,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 48.8343,
+          "latency_ms": 734.0,
+          "retrieved": [
+            {
+              "document_id": "c87b350a-0bef-4d40-987c-0eb9062088de",
+              "page": 1,
+              "score": 48.8343
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 1,
+              "score": 48.0346
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 1,
+              "score": 44.5612
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 3,
+              "score": 44.0039
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 43.3328
+            }
+          ]
+        },
+        {
+          "question": "一家做商业保理的公司，被监管部门叫去谈话，能拖着不去或者随便应付吗？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 41.5161,
+          "latency_ms": 711.5,
+          "retrieved": [
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 41.5161
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 27.5965
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 27.3273
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 26.8082
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 25.6861
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第102位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 27.9712,
+          "latency_ms": 630.2,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 27.9712
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 8.048
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 6.1626
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 7,
+              "score": 5.6725
+            },
+            {
+              "document_id": "10fdd04a-a70a-40a4-b849-73c2f69438f0",
+              "page": 3,
+              "score": 5.3952
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第1位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 26.8039,
+          "latency_ms": 614.2,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 26.8039
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 8,
+              "score": 7.3582
+            },
+            {
+              "document_id": "d8ff183b-2b35-4427-9692-4a35b072e16c",
+              "page": 7,
+              "score": 6.7739
+            },
+            {
+              "document_id": "8cff9884-38ec-4e2f-9d99-aab9c62174ae",
+              "page": 1,
+              "score": 6.2561
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 7,
+              "score": 5.6725
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，能不能给它的控股股东做担保？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 39.8469,
+          "latency_ms": 805.6,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 39.8469
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 36.2972
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 27.058
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 26.1249
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 9,
+              "score": 21.0694
+            }
+          ]
+        },
+        {
+          "question": "一家做典当的公司，想改个名字，要不要先审批？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 16.5048,
+          "latency_ms": 827.9,
+          "retrieved": [
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 4,
+              "score": 16.5048
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 14.8331
+            },
+            {
+              "document_id": "c87b350a-0bef-4d40-987c-0eb9062088de",
+              "page": 1,
+              "score": 14.0717
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 13.5031
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 3,
+              "score": 12.9023
+            }
+          ]
+        },
+        {
+          "question": "借款人想提前还钱，可以吗？提前还钱后要求按实际借了多久算利息，法院支持吗？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 47.3513,
+          "latency_ms": 966.7,
+          "retrieved": [
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 47.3513
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 44.4362
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 43.1576
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 34.5459
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 25.9829
+            }
+          ]
+        },
+        {
+          "question": "这份名单里一共列了多少个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 21.8319,
+          "latency_ms": 748.1,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 21.8319
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 7,
+              "score": 5.6725
+            },
+            {
+              "document_id": "10fdd04a-a70a-40a4-b849-73c2f69438f0",
+              "page": 3,
+              "score": 5.3952
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 5.2253
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 2,
+              "score": 5.0939
+            }
+          ]
+        },
+        {
+          "question": "出借人向法院提起民间借贷诉讼时，必须提供哪些东西来证明借贷关系存在？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 149.3355,
+          "latency_ms": 899.5,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 149.3355
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 147.8496
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 119.3772
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 117.2791
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 114.7667
+            }
+          ]
+        },
+        {
+          "question": "如果双方没有约定利息，出借人要求支付利息，法院会支持吗？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 101.4572,
+          "latency_ms": 744.5,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 101.4572
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 100.1689
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 44.6443
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 42.1866
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 40.006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hybrid-convex-weighted",
+      "isolates": "normalised scores plus a down-weighted dense channel",
+      "retrieval_mode": "hybrid",
+      "rerank": false,
+      "query_rewrite": false,
+      "fusion": "convex-bm25-heavy",
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.8875,
+        "recall_at_1": 0.85,
+        "all_targets_at_1": 0.85,
+        "ndcg_at_1": 0.85,
+        "precision_at_1": 0.85,
+        "recall_at_3": 0.9,
+        "all_targets_at_3": 0.9,
+        "ndcg_at_3": 0.8815464876785729,
+        "precision_at_3": 0.6,
+        "recall_at_5": 0.95,
+        "all_targets_at_5": 0.95,
+        "ndcg_at_5": 0.9030803155822426,
+        "precision_at_5": 0.5,
+        "page_hit": 0.95,
+        "passage_hit": 0.8,
+        "passage_at_1": 0.7,
+        "passage_mrr": 0.75,
+        "example_count": 20,
+        "answerable_example_count": 20,
+        "refusal_example_count": 0,
+        "all_mode_example_count": 20,
+        "any_mode_example_count": 0,
+        "latency_ms": 1241.6282200050773,
+        "latency_ms_p50": 1229.3366999947466,
+        "latency_ms_p95": 1340.959399996791
+      },
+      "evidence_quote_hit_rate": 0.8,
+      "answerable_examples": 20,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "地方财政部门或承保机构能不能找保险中介来帮农户签中央财政补贴险种的合同？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 17,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.892,
+          "latency_ms": 1199.0,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 0.892
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 11,
+              "score": 0.533
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 14,
+              "score": 0.4644
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 9,
+              "score": 0.419
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 4,
+              "score": 0.4059
+            }
+          ]
+        },
+        {
+          "question": "出借人和借款人既约定了逾期利率，又约定了违约金或其他费用，出借人能不能一起要？总共超过多少的部分法院不支持？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 1.0,
+          "latency_ms": 1313.6,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.9811
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.4963
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.2501
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.165
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，如果它给关联方做了担保，最晚要在多少天内向监管部门报告？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1288.3,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 0.7
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.332
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 9,
+              "score": 0.3044
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 0.3004
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 9,
+              "score": 0.3
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，它给同一家客户的担保余额最多能占自己净资产的多少？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.8348,
+          "latency_ms": 1249.6,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 0.8348
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.358
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 0.356
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.3528
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 4,
+              "score": 0.3227
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第51位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1267.2,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.2775
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 8,
+              "score": 0.2773
+            },
+            {
+              "document_id": "56ed5f8d-8b4f-4505-986b-973be69db3d2",
+              "page": 1,
+              "score": 0.2076
+            }
+          ]
+        },
+        {
+          "question": "一家承保机构要拿到农户自己交的那部分保费之后，才能做什么？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 19,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.7096,
+          "latency_ms": 1215.5,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 0.7096
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 0.7
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 10,
+              "score": 0.5586
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 18,
+              "score": 0.425
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 14,
+              "score": 0.4221
+            }
+          ]
+        },
+        {
+          "question": "一家承保机构在拟定农业保险的费率和条款时，综合费用率最高不能超过多少？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 7,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7691,
+          "latency_ms": 1341.0,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 7,
+              "score": 0.7691
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 0.4684
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 0.3696
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 22,
+              "score": 0.3633
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.3
+            }
+          ]
+        },
+        {
+          "question": "一家做融资担保的公司，出了重大负面舆情这类风险事件，最晚多久要报告？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1297.9,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 10,
+              "score": 0.5363
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.4856
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 4,
+              "score": 0.4356
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 5,
+              "score": 0.3871
+            }
+          ]
+        },
+        {
+          "question": "一家做小额贷款的公司，想在本市开张做金融业务，得先拿到什么才能干？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1229.3,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 2,
+              "score": 0.672
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 3,
+              "score": 0.5896
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 3,
+              "score": 0.5737
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 0.5465
+            }
+          ]
+        },
+        {
+          "question": "承保机构在跟被保险人谈好赔多少钱之后，最晚多少天内必须把保险金付给对方？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 19,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.8057,
+          "latency_ms": 1383.2,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 0.8057
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 22,
+              "score": 0.4
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 18,
+              "score": 0.3565
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.2965
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，如果它想跨省开一家分公司，它的注册资本至少要有多少？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 4,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.737,
+          "latency_ms": 1279.3,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 4,
+              "score": 0.737
+            },
+            {
+              "document_id": "c87b350a-0bef-4d40-987c-0eb9062088de",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 1,
+              "score": 0.6847
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 3,
+              "score": 0.6679
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 1,
+              "score": 0.6182
+            }
+          ]
+        },
+        {
+          "question": "一家做商业保理的公司，被监管部门叫去谈话，能拖着不去或者随便应付吗？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1151.7,
+          "retrieved": [
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 0.7
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 8,
+              "score": 0.3668
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 0.3356
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 0.3286
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 0.315
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第102位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1201.0,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 8,
+              "score": 0.3
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.2784
+            },
+            {
+              "document_id": "56ed5f8d-8b4f-4505-986b-973be69db3d2",
+              "page": 1,
+              "score": 0.2153
+            },
+            {
+              "document_id": "d8ff183b-2b35-4427-9692-4a35b072e16c",
+              "page": 5,
+              "score": 0.2123
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第1位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1121.0,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.2826
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 8,
+              "score": 0.2825
+            },
+            {
+              "document_id": "f6a6b34d-cd5f-4c27-85a4-53b953e9982c",
+              "page": 1,
+              "score": 0.2662
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，能不能给它的控股股东做担保？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.9681,
+          "latency_ms": 1196.3,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 0.9681
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.7691
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.3865
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.3637
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 7,
+              "score": 0.3
+            }
+          ]
+        },
+        {
+          "question": "一家做典当的公司，想改个名字，要不要先审批？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7707,
+          "latency_ms": 1158.0,
+          "retrieved": [
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 4,
+              "score": 0.7707
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 0.7629
+            },
+            {
+              "document_id": "c87b350a-0bef-4d40-987c-0eb9062088de",
+              "page": 1,
+              "score": 0.5512
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.5142
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 3,
+              "score": 0.477
+            }
+          ]
+        },
+        {
+          "question": "借款人想提前还钱，可以吗？提前还钱后要求按实际借了多久算利息，法院支持吗？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.8748,
+          "latency_ms": 1170.0,
+          "retrieved": [
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.8748
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.6376
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.6102
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.4824
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.4259
+            }
+          ]
+        },
+        {
+          "question": "这份名单里一共列了多少个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1181.2,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 11,
+              "score": 0.3
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 4,
+              "score": 0.1167
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 6,
+              "score": 0.1112
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 4,
+              "score": 0.0878
+            }
+          ]
+        },
+        {
+          "question": "出借人向法院提起民间借贷诉讼时，必须提供哪些东西来证明借贷关系存在？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.8049,
+          "latency_ms": 1295.1,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.8049
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.7364
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.5511
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.5326
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.5137
+            }
+          ]
+        },
+        {
+          "question": "如果双方没有约定利息，出借人要求支付利息，法院会支持吗？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.8946,
+          "latency_ms": 1294.4,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.8946
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.7925
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.4619
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.2983
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.2025
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hybrid-convex-weighted-rerank",
+      "isolates": "the same shortlist through the reranker; which backend that is depends on RERANK_BACKEND, so this config name is the apples-to-apples slot for comparing lexical against TypeSafe",
+      "retrieval_mode": "hybrid",
+      "rerank": true,
+      "query_rewrite": false,
+      "fusion": "convex-bm25-heavy",
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.9625,
+        "recall_at_1": 0.95,
+        "all_targets_at_1": 0.95,
+        "ndcg_at_1": 0.95,
+        "precision_at_1": 0.95,
+        "recall_at_3": 0.95,
+        "all_targets_at_3": 0.95,
+        "ndcg_at_3": 0.95,
+        "precision_at_3": 0.7333333333333333,
+        "recall_at_5": 1.0,
+        "all_targets_at_5": 1.0,
+        "ndcg_at_5": 0.9715338279036697,
+        "precision_at_5": 0.65,
+        "page_hit": 1.0,
+        "passage_hit": 0.95,
+        "passage_at_1": 0.95,
+        "passage_mrr": 0.95,
+        "example_count": 20,
+        "answerable_example_count": 20,
+        "refusal_example_count": 0,
+        "all_mode_example_count": 20,
+        "any_mode_example_count": 0,
+        "latency_ms": 3045.1313149998896,
+        "latency_ms_p50": 3029.780499986373,
+        "latency_ms_p95": 3209.371100005228
+      },
+      "evidence_quote_hit_rate": 0.95,
+      "answerable_examples": 20,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "地方财政部门或承保机构能不能找保险中介来帮农户签中央财政补贴险种的合同？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 17,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3209.4,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 0.97
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 18,
+              "score": 0.21
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 0.21
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 21,
+              "score": 0.07
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 2,
+              "score": 0.05
+            }
+          ]
+        },
+        {
+          "question": "出借人和借款人既约定了逾期利率，又约定了违约金或其他费用，出借人能不能一起要？总共超过多少的部分法院不支持？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.98,
+          "latency_ms": 3033.0,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.98
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.97
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.14
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.05
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.03
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，如果它给关联方做了担保，最晚要在多少天内向监管部门报告？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3023.4,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 0.97
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 10,
+              "score": 0.07
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.05
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 4,
+              "score": 0.03
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 5,
+              "score": 0.03
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，它给同一家客户的担保余额最多能占自己净资产的多少？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 2924.4,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 0.97
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 2,
+              "score": 0.11
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 0.07
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 0.06
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 10,
+              "score": 0.05
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第51位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.94,
+          "latency_ms": 2888.5,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.94
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.91
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.34
+            },
+            {
+              "document_id": "56ed5f8d-8b4f-4505-986b-973be69db3d2",
+              "page": 1,
+              "score": 0.01
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.01
+            }
+          ]
+        },
+        {
+          "question": "一家承保机构要拿到农户自己交的那部分保费之后，才能做什么？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 19,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.96,
+          "latency_ms": 2978.7,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 0.96
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 14,
+              "score": 0.21
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 11,
+              "score": 0.18
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 18,
+              "score": 0.14
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 10,
+              "score": 0.11
+            }
+          ]
+        },
+        {
+          "question": "一家承保机构在拟定农业保险的费率和条款时，综合费用率最高不能超过多少？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 7,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3137.2,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 7,
+              "score": 0.97
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 18,
+              "score": 0.04
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 1,
+              "score": 0.03
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 2,
+              "score": 0.03
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 9,
+              "score": 0.03
+            }
+          ]
+        },
+        {
+          "question": "一家做融资担保的公司，出了重大负面舆情这类风险事件，最晚多久要报告？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.96,
+          "latency_ms": 2999.0,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.96
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 10,
+              "score": 0.42
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 1,
+              "score": 0.09
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.09
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 5,
+              "score": 0.08
+            }
+          ]
+        },
+        {
+          "question": "一家做小额贷款的公司，想在本市开张做金融业务，得先拿到什么才能干？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.91,
+          "latency_ms": 3029.8,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.91
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 2,
+              "score": 0.87
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 2,
+              "score": 0.79
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.32
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 1,
+              "score": 0.28
+            }
+          ]
+        },
+        {
+          "question": "承保机构在跟被保险人谈好赔多少钱之后，最晚多少天内必须把保险金付给对方？",
+          "category": "同义改写",
+          "source_filename": "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf",
+          "source_filenames": [
+            "15_重要补充_财政部_中央财政农业保险保费补贴管理办法_2021.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 19,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3378.6,
+          "retrieved": [
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 19,
+              "score": 0.97
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 17,
+              "score": 0.03
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 1,
+              "score": 0.02
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.02
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 2,
+              "score": 0.02
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，如果它想跨省开一家分公司，它的注册资本至少要有多少？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 4,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3008.6,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 4,
+              "score": 0.97
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 3,
+              "score": 0.18
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 1,
+              "score": 0.05
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 9,
+              "score": 0.05
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 1,
+              "score": 0.04
+            }
+          ]
+        },
+        {
+          "question": "一家做商业保理的公司，被监管部门叫去谈话，能拖着不去或者随便应付吗？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.42,
+          "latency_ms": 3061.7,
+          "retrieved": [
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 1,
+              "score": 0.42
+            },
+            {
+              "document_id": "456c5d0a-ec5d-419a-9336-ee42f53bf9ac",
+              "page": 9,
+              "score": 0.35
+            },
+            {
+              "document_id": "8d5614c4-69a6-454a-b49c-a1abad3186aa",
+              "page": 2,
+              "score": 0.14
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.09
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.09
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第102位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.95,
+          "latency_ms": 3136.0,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.95
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.52
+            },
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.17
+            },
+            {
+              "document_id": "56ed5f8d-8b4f-4505-986b-973be69db3d2",
+              "page": 1,
+              "score": 0.01
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.01
+            }
+          ]
+        },
+        {
+          "question": "名单中排在第1位的是哪个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.95,
+          "latency_ms": 2755.4,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.95
+            },
+            {
+              "document_id": "10fdd04a-a70a-40a4-b849-73c2f69438f0",
+              "page": 3,
+              "score": 0.02
+            },
+            {
+              "document_id": "967e2e88-14f7-4057-8521-b3b0192402ac",
+              "page": 7,
+              "score": 0.02
+            },
+            {
+              "document_id": "f6a6b34d-cd5f-4c27-85a4-53b953e9982c",
+              "page": 1,
+              "score": 0.01
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.01
+            }
+          ]
+        },
+        {
+          "question": "一家做担保的公司，能不能给它的控股股东做担保？",
+          "category": "同义改写",
+          "source_filename": "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf",
+          "source_filenames": [
+            "14_行政法规_国务院_融资担保公司监督管理条例_2017.pdf"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 6,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.96,
+          "latency_ms": 2911.9,
+          "retrieved": [
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 6,
+              "score": 0.96
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 12,
+              "score": 0.8
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 1,
+              "score": 0.05
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.04
+            },
+            {
+              "document_id": "fc4c9da8-2307-4f72-8198-72eabb51eb70",
+              "page": 7,
+              "score": 0.04
+            }
+          ]
+        },
+        {
+          "question": "一家做典当的公司，想改个名字，要不要先审批？",
+          "category": "同义改写",
+          "source_filename": "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html",
+          "source_filenames": [
+            "16_地方性法规_北京市人大常委会_北京市地方金融监督管理条例_2021.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.95,
+          "latency_ms": 3151.5,
+          "retrieved": [
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.95
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "c87b350a-0bef-4d40-987c-0eb9062088de",
+              "page": 1,
+              "score": 0.17
+            },
+            {
+              "document_id": "c87b350a-0bef-4d40-987c-0eb9062088de",
+              "page": 1,
+              "score": 0.13
+            },
+            {
+              "document_id": "c60d1d5e-3086-4609-bc3d-98bb33beeca4",
+              "page": 1,
+              "score": 0.09
+            }
+          ]
+        },
+        {
+          "question": "借款人想提前还钱，可以吗？提前还钱后要求按实际借了多久算利息，法院支持吗？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3155.3,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.97
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.97
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.91
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.9
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.06
+            }
+          ]
+        },
+        {
+          "question": "这份名单里一共列了多少个县（市）？",
+          "category": "测算表",
+          "source_filename": "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx",
+          "source_filenames": [
+            "18_测算表_河南省财政厅_农业保险保费补贴资金测算表_2022.xlsx"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.91,
+          "latency_ms": 3043.8,
+          "retrieved": [
+            {
+              "document_id": "60c0f4e6-c587-4d28-a3b9-6d3f9cdfd724",
+              "page": 1,
+              "score": 0.91
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 8,
+              "score": 0.13
+            },
+            {
+              "document_id": "a3246cbd-1f56-4b25-9f7d-c5e7e1bf2e21",
+              "page": 2,
+              "score": 0.02
+            },
+            {
+              "document_id": "b6a6b030-691e-4782-a5fb-792a14bcdacf",
+              "page": 22,
+              "score": 0.02
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.01
+            }
+          ]
+        },
+        {
+          "question": "出借人向法院提起民间借贷诉讼时，必须提供哪些东西来证明借贷关系存在？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.97,
+          "latency_ms": 3089.8,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.97
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.96
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.64
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.49
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.38
+            }
+          ]
+        },
+        {
+          "question": "如果双方没有约定利息，出借人要求支付利息，法院会支持吗？",
+          "category": "同义改写",
+          "source_filename": "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html",
+          "source_filenames": [
+            "17_司法解释_最高人民法院_关于审理民间借贷案件适用法律若干问题的规定_2020.html"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.98,
+          "latency_ms": 2986.6,
+          "retrieved": [
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.98
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.96
+            },
+            {
+              "document_id": "1a98c453-d457-42e4-b917-be155f8fe9f1",
+              "page": 1,
+              "score": 0.92
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.61
+            },
+            {
+              "document_id": "8aa6cb6b-dd02-42ff-b5d3-41b2c9a8cd27",
+              "page": 1,
+              "score": 0.45
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reference": {
+    "random_document_hit_at_5": 0.16789984702903538,
+    "random_page_hit_at_5": 0.08809259950088544,
+    "chunks_per_document": 21.4
+  },
+  "by_category": {
+    "hybrid-convex-weighted-rerank": {
+      "同义改写": {
+        "examples": 16,
+        "recall_at_3": 0.9375,
+        "page_hit": 1.0,
+        "quote_hit": 0.9375
+      },
+      "测算表": {
+        "examples": 4,
+        "recall_at_3": 1.0,
+        "page_hit": 1.0,
+        "quote_hit": 1.0
+      }
+    }
+  }
+}
