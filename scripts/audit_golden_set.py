@@ -208,14 +208,20 @@ def bigram_overlap(question: str, quote: str) -> float:
     return len(question_bigrams & bigrams(quote)) / len(question_bigrams)
 
 
-def audit_v2(path: Path, corpus: dict[str, list[tuple[int, str]]], v1: Path) -> dict[str, Any]:
-    """Audit the extended set: every hop must hold, and no question may name a document."""
+def audit_set(
+    path: Path, corpus: dict[str, list[tuple[int, str]]], comparison: Path
+) -> dict[str, Any]:
+    """Audit a generated set: every hop's quote must hold, and no question may name a document.
+
+    `comparison` is the set the wording-overlap numbers are reported against (v2 against v1,
+    v3 against v2).
+    """
     from scripts.generate_golden_set_v2 import document_titles, mentions_a_title
     from scripts.golden_format import load_golden
 
     titles = document_titles(sorted(LAW_DIR.glob("*.*")))
     examples = load_golden(path)
-    previous = load_golden(v1)
+    previous = load_golden(comparison)
 
     quote_missing: list[dict[str, Any]] = []
     page_mismatch: list[dict[str, Any]] = []
@@ -273,8 +279,8 @@ def audit_v2(path: Path, corpus: dict[str, list[tuple[int, str]]], v1: Path) -> 
         "quote_on_a_different_page": page_mismatch,
         "questions_naming_a_document": leaks,
         "wording_overlap_with_answer_sentence": {
-            "v2": overlaps(examples),
-            "v1": overlaps(previous),
+            "this_set": overlaps(examples),
+            "comparison": overlaps(previous),
         },
         "pages_out_of_range": [
             {
@@ -292,8 +298,8 @@ def audit_v2(path: Path, corpus: dict[str, list[tuple[int, str]]], v1: Path) -> 
     }
 
 
-def print_v2_report(report: dict[str, Any]) -> None:
-    print("\n[E] v2 golden set")
+def print_set_report(label: str, report: dict[str, Any]) -> None:
+    print(f"\n[{label}] golden set")
     print(f"  examples: {report['example_count']}  refusals: {report['refusal_examples']}")
     print(f"  categories: {report['categories']}")
     print(f"  evidence modes: {report['modes']}")
@@ -308,8 +314,8 @@ def print_v2_report(report: dict[str, Any]) -> None:
     for item in report["questions_naming_a_document"][:5]:
         print(f"      - {item}")
     overlap = report["wording_overlap_with_answer_sentence"]
-    print(f"  wording overlap with the answer sentence (v1): {overlap['v1']}")
-    print(f"  wording overlap with the answer sentence (v2): {overlap['v2']}")
+    print(f"  wording overlap with the answer sentence, this set:   {overlap['this_set']}")
+    print(f"  wording overlap with the answer sentence, comparison: {overlap['comparison']}")
 
 
 def print_report(report: dict[str, Any]) -> None:
@@ -361,14 +367,22 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", type=Path, default=None)
     parser.add_argument("--v2", type=Path, default=LAW_DIR / "golden_eval_v2.json")
+    parser.add_argument("--v3", type=Path, default=LAW_DIR / "golden_eval_v3.json")
     args = parser.parse_args()
     report = audit()
     corpus = load_corpus()
     if args.v2.exists():
-        report["v2"] = audit_v2(args.v2, corpus, GOLDEN)
+        report["v2"] = audit_set(args.v2, corpus, GOLDEN)
+    if args.v3.exists():
+        # v3 carries the questions for the documents added on 2026-09-27, written in the
+        # de-leaked v2 style - so its wording overlap is measured against v2, not v1.
+        comparison = args.v2 if args.v2.exists() else GOLDEN
+        report["v3"] = audit_set(args.v3, corpus, comparison)
     print_report(report)
     if "v2" in report:
-        print_v2_report(report["v2"])
+        print_set_report("E", report["v2"])
+    if "v3" in report:
+        print_set_report("F", report["v3"])
     if args.json:
         args.json.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\nwrote {args.json}")

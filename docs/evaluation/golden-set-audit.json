@@ -238,15 +238,47 @@
     "quote_on_a_different_page": [],
     "questions_naming_a_document": [],
     "wording_overlap_with_answer_sentence": {
-      "v2": {
+      "this_set": {
         "median": 0.3333333333333333,
         "p90": 0.7142857142857143,
         "max": 0.78125
       },
-      "v1": {
+      "comparison": {
         "median": 0.42857142857142855,
         "p90": 0.6111111111111112,
         "max": 0.8095238095238095
+      }
+    },
+    "pages_out_of_range": []
+  },
+  "v3": {
+    "example_count": 20,
+    "categories": {
+      "同义改写": 16,
+      "测算表": 4
+    },
+    "modes": {
+      "all": 20
+    },
+    "refusal_examples": 0,
+    "examples_with_multiple_hops": 0,
+    "hops": {
+      "total": 20,
+      "quote_on_claimed_page": 20
+    },
+    "quote_not_found_in_source": [],
+    "quote_on_a_different_page": [],
+    "questions_naming_a_document": [],
+    "wording_overlap_with_answer_sentence": {
+      "this_set": {
+        "median": 0.21428571428571427,
+        "p90": 0.6176470588235294,
+        "max": 0.625
+      },
+      "comparison": {
+        "median": 0.3333333333333333,
+        "p90": 0.7142857142857143,
+        "max": 0.78125
       }
     },
     "pages_out_of_range": []

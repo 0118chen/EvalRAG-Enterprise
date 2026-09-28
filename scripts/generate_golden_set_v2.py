@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
-from app.core.ingestion import extract_text
+from app.core.ingestion import SUPPORTED_SUFFIXES, extract_text
 from app.core.llm import create_llm
 from scripts.generate_golden_set import normalize, parse_json_array
 
@@ -45,6 +45,11 @@ SENTENCE_SPLIT = re.compile(r"[。；！？]")
 DEFINITION_MARKERS = ("所称", "是指", "本办法所称")
 # Shared boilerplate makes a question with several correct answers, not a hard one.
 BOILERPLATE_MARKERS = ("施行", "现予公布", "废止", "自20", "自发布之日起", "本通知", "特此")
+
+# A de-leaked question about the effective date asks the same thing of every document in the
+# corpus ("这份规定从哪天生效？"), so the expected document is arbitrary even though the
+# quote verifies. Reject at question level, not quote level.
+BOILERPLATE_QUESTION_MARKERS = ("生效", "施行", "发布日期", "公布日期", "发布之日")
 # Article and list markers that PDF extraction leaves at the front of a sentence.
 LEADING_MARKER = re.compile(r"^(?:第[一二三四五六七八九十百]+条(?:\s*第[一二三四五六七八九十百]+条)*|（[一二三四五六七八九十]+）|\d+[.、])")
 # PDF extraction breaks lines mid-sentence, so a definition arrives as several fragments.
@@ -164,6 +169,17 @@ def mentions_a_title(question: str, titles: list[str]) -> str | None:
     return None
 
 
+def asks_for_boilerplate(question: str) -> bool:
+    """True for the de-leaked question every document in the corpus could answer."""
+    return any(marker in question for marker in BOILERPLATE_QUESTION_MARKERS)
+
+
+def shared_with_another_document(quote: str, source: str, corpus_texts: dict[str, str]) -> bool:
+    """True when the same sentence also appears elsewhere: the document label then collides."""
+    needle = normalize(quote)
+    return any(needle in text for name, text in corpus_texts.items() if name != source)
+
+
 def select_pages(
     pages: list[tuple[int, str]],
     keywords: tuple[str, ...],
@@ -198,15 +214,18 @@ async def generate_paraphrases(
     count: int,
     titles: list[str],
     attempts: int = 3,
+    category: str = "同义改写",
+    corpus_texts: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     pages = extract_text(file.name, file.read_bytes())
     page_map = dict(pages)
     context = "\n\n".join(f"[PAGE {page}]\n{text}" for page, text in pages)
-    # python-docx carries no layout, so the pipeline gives a .docx one page. Saying so
-    # stops the model from inventing page numbers that then fail verification.
+    # Extraction collapses single-page formats to one page (docx always, and HTML or
+    # spreadsheet exports too). Saying so stops the model from inventing page numbers
+    # that then fail verification.
     page_rule = (
         "该文件解析后只有一页，所有 page 必须写 1。"
-        if file.suffix.lower() == ".docx"
+        if len(pages) == 1
         else "page 必须来自文本中的 [PAGE n] 标记。"
     )
     kept: list[dict[str, Any]] = []
@@ -231,6 +250,8 @@ async def generate_paraphrases(
    用“谁来还钱”代替“借款人的还款义务”、用“能不能转给别人”代替“转让条件”。
 7. 问题仍需唯一指向一个答案，不要出现“可能”“大概”“哪些方面”这类含糊说法。
 8. 不得与已生成的问题重复：{json.dumps([item['question'] for item in kept], ensure_ascii=False)}
+9. 不要问生效日期、施行日期、发布日期这类**每份文件都有**的样板信息。
+10. evidence_quote 必须只在本文档出现；不要引用在其他文件里也会出现的通用条款。
 {leak_feedback(leaked)}
 JSON 示例：
 [
@@ -259,9 +280,27 @@ JSON 示例：
                     if leak
                     else ("引文不在所标页码" if question else "缺少问题文本")
                 )
-                reject("同义改写", question, reason, file.name)
+                reject(category, question, reason, file.name)
                 if leak:
                     leaked.append(leak)
+                continue
+            if asks_for_boilerplate(question):
+                dropped += 1
+                reject(
+                    category,
+                    question,
+                    "问题在问生效/发布日期这类每份文件都有的样板信息，去泄漏后指向不唯一",
+                    file.name,
+                )
+                continue
+            if corpus_texts and shared_with_another_document(quote, file.name, corpus_texts):
+                dropped += 1
+                reject(
+                    category,
+                    question,
+                    "引文在语料其他文档里也出现，文档级标签不可区分",
+                    file.name,
+                )
                 continue
             if any(item["question"] == question for item in kept):
                 continue
@@ -270,7 +309,7 @@ JSON 示例：
                     "question": question,
                     "expected_answer": str(item.get("expected_answer", "")).strip(),
                     "page": page,
-                    "category": "同义改写",
+                    "category": category,
                     "evidence_quote": quote,
                     "source_filename": file.name,
                 }
@@ -547,6 +586,15 @@ JSON 示例：
     return kept[:count]
 
 
+def selected(path: Path, wanted: list[str]) -> bool:
+    """Match by numeric filename prefix (`14`) or by a whole name segment (`中华人民共和国民法典`).
+
+    Whole segments rather than substrings: `15` must not select a file whose year is `_2015`.
+    """
+    segments = path.stem.split("_")
+    return segments[0] in wanted or any(token in segments for token in wanted)
+
+
 def find_document(paths: list[Path], keyword: str) -> Path:
     matches = [path for path in paths if keyword in path.stem]
     if not matches:
@@ -563,25 +611,61 @@ async def main() -> None:
     parser.add_argument("--equivalence", type=int, default=6)
     parser.add_argument("--refusal", type=int, default=8)
     parser.add_argument("--types", default="paraphrase,multi_hop,equivalence,refusal")
+    parser.add_argument(
+        "--documents",
+        default="",
+        help=(
+            "restrict question generation to these files: comma-separated filename prefixes "
+            "(e.g. 14,15,18) or whole name segments (e.g. 中华人民共和国民法典); empty means "
+            "every file in --law-dir"
+        ),
+    )
+    parser.add_argument("--dataset", default="rural-finance-regulations-golden-v2")
     args = parser.parse_args()
 
     settings = get_settings()
     llm = create_llm(settings)
     law_dir = Path(args.law_dir)
-    files = sorted(
+    corpus_files = sorted(
         path
         for path in law_dir.iterdir()
-        if path.is_file() and path.suffix.lower() in {".pdf", ".docx"}
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
     )
-    titles = document_titles(files)
+    # The title list and the equivalence scan must see the whole corpus, so --documents
+    # only narrows which files get questions of their own.
+    document_filter = [token.strip() for token in args.documents.split(",") if token.strip()]
+    files = (
+        [path for path in corpus_files if selected(path, document_filter)]
+        if document_filter
+        else corpus_files
+    )
+    if document_filter and not files:
+        raise SystemExit(f"no file under {law_dir} matches --documents {args.documents!r}")
+    titles = document_titles(corpus_files)
     wanted = {name.strip() for name in args.types.split(",") if name.strip()}
     examples: list[dict[str, Any]] = []
     dropped: Counter[str] = Counter()
 
     if "paraphrase" in wanted:
+        # Normalized full text of every file: a quote that also lives in another document makes
+        # the expected-document label ambiguous, so those questions are rejected up front.
+        corpus_texts = {
+            path.name: normalize(
+                "\n".join(text for _page, text in extract_text(path.name, path.read_bytes()))
+            )
+            for path in corpus_files
+        }
         for file in files:
+            # Spreadsheets answer "which row" questions, not "which rule" questions; keep
+            # them in their own category so the two kinds never average together.
+            category = "测算表" if file.suffix.lower() == ".xlsx" else "同义改写"
             generated, failed = await generate_paraphrases(
-                file, llm, args.per_document, titles
+                file,
+                llm,
+                args.per_document,
+                titles,
+                category=category,
+                corpus_texts=corpus_texts,
             )
             dropped["paraphrase"] += failed
             examples.extend(generated)
@@ -589,8 +673,8 @@ async def main() -> None:
 
     if "multi_hop" in wanted:
         for pair in PAIRS[: args.multi_hop]:
-            left = find_document(files, pair["left"])
-            right = find_document(files, pair["right"])
+            left = find_document(corpus_files, pair["left"])
+            right = find_document(corpus_files, pair["right"])
             example, failed = await generate_multi_hop(
                 left, right, llm, pair["keywords"], pair["topic"], titles
             )
@@ -603,7 +687,7 @@ async def main() -> None:
 
     if "equivalence" in wanted:
         corpus = {
-            path.name: extract_text(path.name, path.read_bytes()) for path in files
+            path.name: extract_text(path.name, path.read_bytes()) for path in corpus_files
         }
         candidates = duplicated_sentences(corpus)
         definitional = [candidate for candidate in candidates if candidate["definitional"]]
@@ -611,7 +695,7 @@ async def main() -> None:
             f"sentences shared by more than one file: {len(candidates)} "
             f"(definitional: {len(definitional)})"
         )
-        by_name = {path.name: path for path in files}
+        by_name = {path.name: path for path in corpus_files}
         # Definitional sentences first, then the substantive shared requirements; both are
         # legitimate equivalence labels, while publication boilerplate was already dropped.
         pool = definitional + [c for c in candidates if not c["definitional"]]
@@ -629,11 +713,12 @@ async def main() -> None:
         print(f"refusal kept: {len(refusals)}")
 
     payload = {
-        "dataset": "rural-finance-regulations-golden-v2",
+        "dataset": args.dataset,
         "generated_at": datetime.now(UTC).isoformat(),
         "generator": "scripts/generate_golden_set_v2.py",
         "counts": Counter(example["category"] for example in examples),
-        "corpus": [path.name for path in files],
+        "corpus": [path.name for path in corpus_files],
+        "question_documents": [path.name for path in files],
         "examples": examples,
     }
     output = Path(args.output)

@@ -61,11 +61,25 @@ python -m scripts.run_golden_experiment --golden law/golden_eval_v2.json \
     --database data/experiments/golden-v2.db
 ```
 
+v3（20 题：语料扩容时新增的 5 份文档各 4 题，沿用 v2 的去泄漏方法论）：
+
+```bash
+# --documents 接受数字前缀或完整名字段；生成侧已带两道闸门（样板题、跨文档重复引文）
+python -m scripts.generate_golden_set_v2 --documents 14,15,16,17,18 --types paraphrase \
+    --per-document 4 --output law/golden_eval_v3.json \
+    --dataset rural-finance-regulations-golden-v3
+python -m scripts.run_golden_experiment --golden law/golden_eval_v3.json \
+    --json docs/evaluation/golden-set-v3-corpus18-2026-09-27.json \
+    --markdown docs/evaluation/golden-set-v3-corpus18-2026-09-27.md \
+    --database data/experiments/golden-v3.db
+```
+
 结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
 v1 标注 52/52 可回验，但指标已饱和（18 份语料上**纯 BM25** 就在文档级/页级拿满分，重排增益归零），
 且本地 32 维 hash 向量使 hybrid 反而低于纯 BM25；v2 去掉"问题里报法规名"的词面泄漏后
 指标明显下降（R@1 1.000 → 0.660），两种题集的对照见该报告 §8，
-两轮语料（13 份 / 18 份）的对照与逐题归因见 §9。
+两轮语料（13 份 / 18 份）的对照与逐题归因见 §9，给新增 5 份文档补题后的结果见 §10
+（BM25 R@1 0.800、表格类 4/4 全中——扩语料没有把新格式落下）。
 
 ```bash
 python -m app.cli run-evaluation <evaluation_id>
