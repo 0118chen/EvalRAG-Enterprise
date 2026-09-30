@@ -1,0 +1,4123 @@
+{
+  "generated_at": "2026-09-30T00:59:25.512788+00:00",
+  "git_commit": "1186dd9",
+  "corpus": {
+    "documents": 8,
+    "chunks": 8,
+    "versions": [
+      "latest"
+    ]
+  },
+  "dataset": {
+    "name": "rural-finance-regulations-golden",
+    "examples": 16,
+    "source": "tests\\fixtures\\eval_gate\\golden.json",
+    "top_k": 5
+  },
+  "rerank_backend": "lexical",
+  "rerank_usage": {
+    "calls": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "model": null,
+    "cost_usd": 0.0,
+    "price_note": "input tokens only, $42/Btok, https://docs.typesafe.ai/models",
+    "expected_calls": 320,
+    "degraded": false
+  },
+  "embedding": {
+    "provider": "hash",
+    "dimensions": 32,
+    "dense_backend": "local",
+    "sparse_backend": "local"
+  },
+  "configs": [
+    {
+      "name": "sparse-bm25",
+      "isolates": "BM25 only, the no-frills baseline",
+      "retrieval_mode": "sparse",
+      "rerank": false,
+      "query_rewrite": false,
+      "fusion": null,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.7,
+        "recall_at_1": 0.6,
+        "all_targets_at_1": 0.6,
+        "ndcg_at_1": 0.6,
+        "precision_at_1": 0.6,
+        "recall_at_3": 0.8666666666666667,
+        "all_targets_at_3": 0.8666666666666667,
+        "ndcg_at_3": 0.7420619835714305,
+        "precision_at_3": 0.28888888888888886,
+        "recall_at_5": 0.8666666666666667,
+        "all_targets_at_5": 0.8666666666666667,
+        "ndcg_at_5": 0.7420619835714305,
+        "precision_at_5": 0.17333333333333334,
+        "page_hit": 0.8666666666666667,
+        "passage_hit": 0.8666666666666667,
+        "passage_at_1": 0.6,
+        "passage_mrr": 0.7,
+        "example_count": 16,
+        "answerable_example_count": 15,
+        "refusal_example_count": 1,
+        "all_mode_example_count": 15,
+        "any_mode_example_count": 0,
+        "negative_retrieved_rate": 1.0,
+        "latency_ms": 2.2090875063440762,
+        "latency_ms_p50": 2.234900020994246,
+        "latency_ms_p95": 2.9365000082179904
+      },
+      "evidence_quote_hit_rate": 0.8666666666666667,
+      "answerable_examples": 15,
+      "negative_retrieved_rate": 1.0,
+      "refusal_examples": 1,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "催收的时候有哪些做法是被禁止的？",
+          "category": "同义改写",
+          "source_filename": "08_逾期催收规程.md",
+          "source_filenames": [
+            "08_逾期催收规程.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 2.6535,
+          "latency_ms": 2.9,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 2.6535
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 1.197
+            }
+          ]
+        },
+        {
+          "question": "占用费一年按什么比例收，能不能先扣下来？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 6.9967,
+          "latency_ms": 2.7,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 6.9967
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 4.4241
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 1.5453
+            }
+          ]
+        },
+        {
+          "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 11.6793,
+          "latency_ms": 2.8,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 11.6793
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 9.3815
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 1.8106
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 1.0301
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3813
+            }
+          ]
+        },
+        {
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 1.9542,
+          "latency_ms": 2.4,
+          "retrieved": [
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 1.9542
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 1.197
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 1.1048
+            }
+          ]
+        },
+        {
+          "question": "检查发现的问题要在多久内改完？",
+          "category": "同义改写",
+          "source_filename": "06_监督检查办法.md",
+          "source_filenames": [
+            "06_监督检查办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 13.4037,
+          "latency_ms": 2.4,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 13.4037
+            }
+          ]
+        },
+        {
+          "question": "欠了多久以后可以用这笔钱把账核销掉？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 6.6656,
+          "latency_ms": 2.7,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 6.6656
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.4961
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.363
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.3573
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.3549
+            }
+          ]
+        },
+        {
+          "question": "借款合同要签几份，谁各留一份？",
+          "category": "同义改写",
+          "source_filename": "04_借款合同规范.md",
+          "source_filenames": [
+            "04_借款合同规范.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 14.5475,
+          "latency_ms": 2.2,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 14.5475
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.3652
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.3563
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.3181
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.3091
+            }
+          ]
+        },
+        {
+          "question": "想入社第一次至少要出多少钱？",
+          "category": "同义改写",
+          "source_filename": "07_成员资格与出资规定.md",
+          "source_filenames": [
+            "07_成员资格与出资规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 3.004,
+          "latency_ms": 2.3,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 3.004
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 2.5497
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.8146
+            }
+          ]
+        },
+        {
+          "question": "管理费按什么计提，有没有上限？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 8.2518,
+          "latency_ms": 2.3,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 8.2518
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 5.4214
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 2.3837
+            }
+          ]
+        },
+        {
+          "question": "这笔钱借出去最多能借多久？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.0,
+          "latency_ms": 2.2,
+          "retrieved": []
+        },
+        {
+          "question": "把互助资金挪走了要怎么罚？",
+          "category": "同义改写",
+          "source_filename": "05_财务公开办法.md",
+          "source_filenames": [
+            "05_财务公开办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 3.6675,
+          "latency_ms": 2.1,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 3.6675
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 3.2035
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 3.0212
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 2.5596
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 2.1783
+            }
+          ]
+        },
+        {
+          "question": "农户一次最多能从互助资金里借多少钱？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 4.8015,
+          "latency_ms": 2.2,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 4.8015
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 4.2404
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 3.0212
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 2.5596
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 2.1783
+            }
+          ]
+        },
+        {
+          "question": "如果是买小型农机具，能多借多少？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 7.7334,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 7.7334
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 7.0845
+            }
+          ]
+        },
+        {
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 12.8111,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 12.8111
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 5.7004
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 5.5751
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 5.194
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 2.6392
+            }
+          ]
+        },
+        {
+          "question": "商业银行发行的理财产品最低起购金额是多少？",
+          "category": "应拒答",
+          "source_filename": null,
+          "source_filenames": [],
+          "evidence_mode": "all",
+          "should_refuse": true,
+          "expected_page": null,
+          "recall_at_1": null,
+          "recall_at_3": null,
+          "recall_at_5": null,
+          "all_targets_at_5": null,
+          "any_target_at_5": null,
+          "page_hit": null,
+          "retrieved_something": 1.0,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [],
+          "top_score": 1.4747,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 1.4747
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 1.3971
+            }
+          ]
+        },
+        {
+          "question": "连着两次没按时还钱会有什么后果？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 1.0537,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 1.0537
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 1.0355
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.7462
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dense-hash",
+      "isolates": "the dense channel on its own (32-d hash embedding, no semantics)",
+      "retrieval_mode": "dense",
+      "rerank": false,
+      "query_rewrite": false,
+      "fusion": null,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.5222222222222223,
+        "recall_at_1": 0.3333333333333333,
+        "all_targets_at_1": 0.3333333333333333,
+        "ndcg_at_1": 0.3333333333333333,
+        "precision_at_1": 0.3333333333333333,
+        "recall_at_3": 0.6666666666666666,
+        "all_targets_at_3": 0.6666666666666666,
+        "ndcg_at_3": 0.5349146009523887,
+        "precision_at_3": 0.2222222222222222,
+        "recall_at_5": 0.8,
+        "all_targets_at_5": 0.8,
+        "ndcg_at_5": 0.5923381420288412,
+        "precision_at_5": 0.16000000000000003,
+        "page_hit": 0.8,
+        "passage_hit": 0.8,
+        "passage_at_1": 0.3333333333333333,
+        "passage_mrr": 0.5222222222222223,
+        "example_count": 16,
+        "answerable_example_count": 15,
+        "refusal_example_count": 1,
+        "all_mode_example_count": 15,
+        "any_mode_example_count": 0,
+        "negative_retrieved_rate": 1.0,
+        "latency_ms": 0.3042499884031713,
+        "latency_ms_p50": 0.2875999780371785,
+        "latency_ms_p95": 0.4751000087708235
+      },
+      "evidence_quote_hit_rate": 0.8,
+      "answerable_examples": 15,
+      "negative_retrieved_rate": 1.0,
+      "refusal_examples": 1,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "催收的时候有哪些做法是被禁止的？",
+          "category": "同义改写",
+          "source_filename": "08_逾期催收规程.md",
+          "source_filenames": [
+            "08_逾期催收规程.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.2552,
+          "latency_ms": 0.5,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.2552
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.2464
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.1792
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.034
+            }
+          ]
+        },
+        {
+          "question": "占用费一年按什么比例收，能不能先扣下来？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.3184,
+          "latency_ms": 0.4,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.3184
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.3109
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.2177
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1769
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.077
+            }
+          ]
+        },
+        {
+          "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.4946,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.4946
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.4326
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.427
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.3649
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.2957
+            }
+          ]
+        },
+        {
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 4,
+          "passage_ranks": [
+            4
+          ],
+          "top_score": 0.4651,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.4651
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.4337
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.433
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.3192
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.2906
+            }
+          ]
+        },
+        {
+          "question": "检查发现的问题要在多久内改完？",
+          "category": "同义改写",
+          "source_filename": "06_监督检查办法.md",
+          "source_filenames": [
+            "06_监督检查办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.2081,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.2081
+            }
+          ]
+        },
+        {
+          "question": "欠了多久以后可以用这笔钱把账核销掉？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.5764,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.5764
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.4332
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.4256
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.4196
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3826
+            }
+          ]
+        },
+        {
+          "question": "借款合同要签几份，谁各留一份？",
+          "category": "同义改写",
+          "source_filename": "04_借款合同规范.md",
+          "source_filenames": [
+            "04_借款合同规范.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.3628,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3628
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.1905
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0686
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.044
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0371
+            }
+          ]
+        },
+        {
+          "question": "想入社第一次至少要出多少钱？",
+          "category": "同义改写",
+          "source_filename": "07_成员资格与出资规定.md",
+          "source_filenames": [
+            "07_成员资格与出资规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 4,
+          "passage_ranks": [
+            4
+          ],
+          "top_score": 0.5464,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.5464
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.143
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1024
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0757
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0729
+            }
+          ]
+        },
+        {
+          "question": "管理费按什么计提，有没有上限？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.4661,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.4661
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.32
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.2883
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.2609
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.2538
+            }
+          ]
+        },
+        {
+          "question": "这笔钱借出去最多能借多久？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.4503,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.4503
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.3795
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.2816
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.2644
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.2408
+            }
+          ]
+        },
+        {
+          "question": "把互助资金挪走了要怎么罚？",
+          "category": "同义改写",
+          "source_filename": "05_财务公开办法.md",
+          "source_filenames": [
+            "05_财务公开办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.4988,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.4988
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.443
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.4256
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.4232
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.3392
+            }
+          ]
+        },
+        {
+          "question": "农户一次最多能从互助资金里借多少钱？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.5161,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.5161
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.4227
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.3259
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3159
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.3067
+            }
+          ]
+        },
+        {
+          "question": "如果是买小型农机具，能多借多少？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.1752,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.1752
+            }
+          ]
+        },
+        {
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 0.3401,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.3401
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.2708
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.2543
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.2521
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1749
+            }
+          ]
+        },
+        {
+          "question": "商业银行发行的理财产品最低起购金额是多少？",
+          "category": "应拒答",
+          "source_filename": null,
+          "source_filenames": [],
+          "evidence_mode": "all",
+          "should_refuse": true,
+          "expected_page": null,
+          "recall_at_1": null,
+          "recall_at_3": null,
+          "recall_at_5": null,
+          "all_targets_at_5": null,
+          "any_target_at_5": null,
+          "page_hit": null,
+          "retrieved_something": 1.0,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [],
+          "top_score": 0.5384,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.5384
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.4899
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3296
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.3035
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.2857
+            }
+          ]
+        },
+        {
+          "question": "连着两次没按时还钱会有什么后果？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.2916,
+          "latency_ms": 0.3,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.2916
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.2541
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1405
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1376
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1117
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hybrid-rrf",
+      "isolates": "RRF fusion of both channels, no rerank",
+      "retrieval_mode": "hybrid",
+      "rerank": false,
+      "query_rewrite": false,
+      "fusion": null,
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.5944444444444444,
+        "recall_at_1": 0.3333333333333333,
+        "all_targets_at_1": 0.3333333333333333,
+        "ndcg_at_1": 0.3333333333333333,
+        "precision_at_1": 0.3333333333333333,
+        "recall_at_3": 0.8666666666666667,
+        "all_targets_at_3": 0.8666666666666667,
+        "ndcg_at_3": 0.652371901428583,
+        "precision_at_3": 0.28888888888888886,
+        "recall_at_5": 0.9333333333333333,
+        "all_targets_at_5": 0.9333333333333333,
+        "ndcg_at_5": 0.6810836719668092,
+        "precision_at_5": 0.18666666666666668,
+        "page_hit": 0.9333333333333333,
+        "passage_hit": 0.9333333333333333,
+        "passage_at_1": 0.3333333333333333,
+        "passage_mrr": 0.5944444444444444,
+        "example_count": 16,
+        "answerable_example_count": 15,
+        "refusal_example_count": 1,
+        "all_mode_example_count": 15,
+        "any_mode_example_count": 0,
+        "negative_retrieved_rate": 1.0,
+        "latency_ms": 1.5549937597825192,
+        "latency_ms_p50": 1.5307000139728189,
+        "latency_ms_p95": 1.7702000914141536
+      },
+      "evidence_quote_hit_rate": 0.9333333333333333,
+      "answerable_examples": 15,
+      "negative_retrieved_rate": 1.0,
+      "refusal_examples": 1,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "催收的时候有哪些做法是被禁止的？",
+          "category": "同义改写",
+          "source_filename": "08_逾期催收规程.md",
+          "source_filenames": [
+            "08_逾期催收规程.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.7,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0161
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0161
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0159
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0156
+            }
+          ]
+        },
+        {
+          "question": "占用费一年按什么比例收，能不能先扣下来？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.0323,
+          "latency_ms": 1.7,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0323
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0161
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0161
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0159
+            }
+          ]
+        },
+        {
+          "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 4,
+          "passage_ranks": [
+            4
+          ],
+          "top_score": 0.0323,
+          "latency_ms": 1.7,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0323
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.032
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0315
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0312
+            }
+          ]
+        },
+        {
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.5,
+          "retrieved": [
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0323
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0315
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0159
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0154
+            }
+          ]
+        },
+        {
+          "question": "检查发现的问题要在多久内改完？",
+          "category": "同义改写",
+          "source_filename": "06_监督检查办法.md",
+          "source_filenames": [
+            "06_监督检查办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.5,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0328
+            }
+          ]
+        },
+        {
+          "question": "欠了多久以后可以用这笔钱把账核销掉？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0318
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0311
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.031
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0306
+            }
+          ]
+        },
+        {
+          "question": "借款合同要签几份，谁各留一份？",
+          "category": "同义改写",
+          "source_filename": "04_借款合同规范.md",
+          "source_filenames": [
+            "04_借款合同规范.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0315
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0312
+            }
+          ]
+        },
+        {
+          "question": "想入社第一次至少要出多少钱？",
+          "category": "同义改写",
+          "source_filename": "07_成员资格与出资规定.md",
+          "source_filenames": [
+            "07_成员资格与出资规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.0315,
+          "latency_ms": 1.5,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0315
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.031
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0164
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0164
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0161
+            }
+          ]
+        },
+        {
+          "question": "管理费按什么计提，有没有上限？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.0325,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0325
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0325
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0317
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0156
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0154
+            }
+          ]
+        },
+        {
+          "question": "这笔钱借出去最多能借多久？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.0164,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0164
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0161
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0159
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0156
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0154
+            }
+          ]
+        },
+        {
+          "question": "把互助资金挪走了要怎么罚？",
+          "category": "同义改写",
+          "source_filename": "05_财务公开办法.md",
+          "source_filenames": [
+            "05_财务公开办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.3,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.032
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0312
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0308
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0308
+            }
+          ]
+        },
+        {
+          "question": "农户一次最多能从互助资金里借多少钱？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.032
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.031
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.031
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0308
+            }
+          ]
+        },
+        {
+          "question": "如果是买小型农机具，能多借多少？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 0.0164,
+          "latency_ms": 1.5,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0164
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0164
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0161
+            }
+          ]
+        },
+        {
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.0325,
+          "latency_ms": 1.7,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0325
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0323
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0312
+            }
+          ]
+        },
+        {
+          "question": "商业银行发行的理财产品最低起购金额是多少？",
+          "category": "应拒答",
+          "source_filename": null,
+          "source_filenames": [],
+          "evidence_mode": "all",
+          "should_refuse": true,
+          "expected_page": null,
+          "recall_at_1": null,
+          "recall_at_3": null,
+          "recall_at_5": null,
+          "all_targets_at_5": null,
+          "any_target_at_5": null,
+          "page_hit": null,
+          "retrieved_something": 1.0,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [],
+          "top_score": 0.0323,
+          "latency_ms": 1.8,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0323
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0315
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.0164
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0161
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0156
+            }
+          ]
+        },
+        {
+          "question": "连着两次没按时还钱会有什么后果？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.0328,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.0328
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.032
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0313
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0159
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0156
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hybrid-convex-weighted",
+      "isolates": "normalised scores plus a down-weighted dense channel",
+      "retrieval_mode": "hybrid",
+      "rerank": false,
+      "query_rewrite": false,
+      "fusion": "convex-bm25-heavy",
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.7055555555555556,
+        "recall_at_1": 0.6,
+        "all_targets_at_1": 0.6,
+        "ndcg_at_1": 0.6,
+        "precision_at_1": 0.6,
+        "recall_at_3": 0.8,
+        "all_targets_at_3": 0.8,
+        "ndcg_at_3": 0.7174573004761944,
+        "precision_at_3": 0.26666666666666666,
+        "recall_at_5": 0.8666666666666667,
+        "all_targets_at_5": 0.8666666666666667,
+        "ndcg_at_5": 0.7461690710144205,
+        "precision_at_5": 0.17333333333333334,
+        "page_hit": 0.8666666666666667,
+        "passage_hit": 0.8666666666666667,
+        "passage_at_1": 0.6,
+        "passage_mrr": 0.7055555555555556,
+        "example_count": 16,
+        "answerable_example_count": 15,
+        "refusal_example_count": 1,
+        "all_mode_example_count": 15,
+        "any_mode_example_count": 0,
+        "negative_retrieved_rate": 1.0,
+        "latency_ms": 2.082468752632849,
+        "latency_ms_p50": 1.7812999431043863,
+        "latency_ms_p95": 3.1091999262571335
+      },
+      "evidence_quote_hit_rate": 0.8666666666666667,
+      "answerable_examples": 15,
+      "negative_retrieved_rate": 1.0,
+      "refusal_examples": 1,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "催收的时候有哪些做法是被禁止的？",
+          "category": "同义改写",
+          "source_filename": "08_逾期催收规程.md",
+          "source_filenames": [
+            "08_逾期催收规程.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 1.0,
+          "latency_ms": 3.1,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.288
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.1969
+            }
+          ]
+        },
+        {
+          "question": "占用费一年按什么比例收，能不能先扣下来？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7,
+          "latency_ms": 3.1,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3697
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.2915
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.1869
+            }
+          ]
+        },
+        {
+          "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.8339,
+          "latency_ms": 2.9,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.8339
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.8078
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.3982
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.2632
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.2506
+            }
+          ]
+        },
+        {
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 4,
+          "passage_ranks": [
+            4
+          ],
+          "top_score": 1.0,
+          "latency_ms": 2.6,
+          "retrieved": [
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.3538
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.2773
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.1971
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1769
+            }
+          ]
+        },
+        {
+          "question": "检查发现的问题要在多久内改完？",
+          "category": "同义改写",
+          "source_filename": "06_监督检查办法.md",
+          "source_filenames": [
+            "06_监督检查办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 1.0,
+          "latency_ms": 2.6,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 1.0
+            }
+          ]
+        },
+        {
+          "question": "欠了多久以后可以用这笔钱把账核销掉？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 1.0,
+          "latency_ms": 2.9,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1766
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1637
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.1586
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.1183
+            }
+          ]
+        },
+        {
+          "question": "借款合同要签几份，谁各留一份？",
+          "category": "同义改写",
+          "source_filename": "04_借款合同规范.md",
+          "source_filenames": [
+            "04_借款合同规范.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 1.0,
+          "latency_ms": 1.8,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.1483
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0319
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0153
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0109
+            }
+          ]
+        },
+        {
+          "question": "想入社第一次至少要出多少钱？",
+          "category": "同义改写",
+          "source_filename": "07_成员资格与出资规定.md",
+          "source_filenames": [
+            "07_成员资格与出资规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1.9,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.5769
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0633
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0395
+            }
+          ]
+        },
+        {
+          "question": "管理费按什么计提，有没有上限？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.8853,
+          "latency_ms": 1.5,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.8853
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.6624
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.1603
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1389
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.1333
+            }
+          ]
+        },
+        {
+          "question": "这笔钱借出去最多能借多久？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.3,
+          "latency_ms": 1.5,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.2263
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1244
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1066
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.082
+            }
+          ]
+        },
+        {
+          "question": "把互助资金挪走了要怎么罚？",
+          "category": "同义改写",
+          "source_filename": "05_财务公开办法.md",
+          "source_filenames": [
+            "05_财务公开办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 1.0,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.8223
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.7138
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.6093
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.5388
+            }
+          ]
+        },
+        {
+          "question": "农户一次最多能从互助资金里借多少钱？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 1.0,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.6313
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.6167
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.4332
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3867
+            }
+          ]
+        },
+        {
+          "question": "如果是买小型农机具，能多借多少？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7,
+          "latency_ms": 1.4,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.3
+            }
+          ]
+        },
+        {
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.921,
+          "latency_ms": 1.7,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.921
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.5998
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.4902
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.4405
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.24
+            }
+          ]
+        },
+        {
+          "question": "商业银行发行的理财产品最低起购金额是多少？",
+          "category": "应拒答",
+          "source_filename": null,
+          "source_filenames": [],
+          "evidence_mode": "all",
+          "should_refuse": true,
+          "expected_page": null,
+          "recall_at_1": null,
+          "recall_at_3": null,
+          "recall_at_5": null,
+          "all_targets_at_5": null,
+          "any_target_at_5": null,
+          "page_hit": null,
+          "retrieved_something": 1.0,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [],
+          "top_score": 0.875,
+          "latency_ms": 1.7,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.875
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.271
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1594
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1487
+            }
+          ]
+        },
+        {
+          "question": "连着两次没按时还钱会有什么后果？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 1.0,
+          "latency_ms": 1.8,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 1.0
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.7649
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.2602
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1396
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1365
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hybrid-convex-weighted-rerank",
+      "isolates": "the same shortlist through the reranker; which backend that is depends on RERANK_BACKEND, so this config name is the apples-to-apples slot for comparing lexical against TypeSafe",
+      "retrieval_mode": "hybrid",
+      "rerank": true,
+      "query_rewrite": false,
+      "fusion": "convex-bm25-heavy",
+      "top_k": 5,
+      "metrics": {
+        "mrr": 0.7277777777777777,
+        "recall_at_1": 0.6,
+        "all_targets_at_1": 0.6,
+        "ndcg_at_1": 0.6,
+        "precision_at_1": 0.6,
+        "recall_at_3": 0.8666666666666667,
+        "all_targets_at_3": 0.8666666666666667,
+        "ndcg_at_3": 0.7507906338095277,
+        "precision_at_3": 0.28888888888888886,
+        "recall_at_5": 0.9333333333333333,
+        "all_targets_at_5": 0.9333333333333333,
+        "ndcg_at_5": 0.7795024043477539,
+        "precision_at_5": 0.18666666666666668,
+        "page_hit": 0.9333333333333333,
+        "passage_hit": 0.9333333333333333,
+        "passage_at_1": 0.6,
+        "passage_mrr": 0.7277777777777777,
+        "example_count": 16,
+        "answerable_example_count": 15,
+        "refusal_example_count": 1,
+        "all_mode_example_count": 15,
+        "any_mode_example_count": 0,
+        "negative_retrieved_rate": 1.0,
+        "latency_ms": 2.379049990850035,
+        "latency_ms_p50": 2.2040000185370445,
+        "latency_ms_p95": 3.9343000389635563
+      },
+      "evidence_quote_hit_rate": 0.9333333333333333,
+      "answerable_examples": 15,
+      "negative_retrieved_rate": 1.0,
+      "refusal_examples": 1,
+      "passage_cross_check": true,
+      "per_example": [
+        {
+          "question": "催收的时候有哪些做法是被禁止的？",
+          "category": "同义改写",
+          "source_filename": "08_逾期催收规程.md",
+          "source_filenames": [
+            "08_逾期催收规程.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7111,
+          "latency_ms": 3.7,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.7111
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.2016
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.1379
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0111
+            }
+          ]
+        },
+        {
+          "question": "占用费一年按什么比例收，能不能先扣下来？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7387,
+          "latency_ms": 2.7,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.7387
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3928
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.3026
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.2842
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.1778
+            }
+          ]
+        },
+        {
+          "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7937,
+          "latency_ms": 2.4,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.7937
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.7718
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.3624
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.2303
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.2198
+            }
+          ]
+        },
+        {
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 4,
+          "passage_ranks": [
+            4
+          ],
+          "top_score": 0.713,
+          "latency_ms": 2.1,
+          "retrieved": [
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.713
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.2607
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.1941
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.151
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1239
+            }
+          ]
+        },
+        {
+          "question": "检查发现的问题要在多久内改完？",
+          "category": "同义改写",
+          "source_filename": "06_监督检查办法.md",
+          "source_filenames": [
+            "06_监督检查办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.772,
+          "latency_ms": 1.6,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.772
+            }
+          ]
+        },
+        {
+          "question": "欠了多久以后可以用这笔钱把账核销掉？",
+          "category": "同义改写",
+          "source_filename": "03_风险准备金规定.md",
+          "source_filenames": [
+            "03_风险准备金规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7387,
+          "latency_ms": 2.3,
+          "retrieved": [
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.7387
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.1266
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1174
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.1041
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.0758
+            }
+          ]
+        },
+        {
+          "question": "借款合同要签几份，谁各留一份？",
+          "category": "同义改写",
+          "source_filename": "04_借款合同规范.md",
+          "source_filenames": [
+            "04_借款合同规范.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7818,
+          "latency_ms": 2.0,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.7818
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.1174
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.036
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0243
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0212
+            }
+          ]
+        },
+        {
+          "question": "想入社第一次至少要出多少钱？",
+          "category": "同义改写",
+          "source_filename": "07_成员资格与出资规定.md",
+          "source_filenames": [
+            "07_成员资格与出资规定.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 0.0,
+          "recall_at_5": 0.0,
+          "all_targets_at_5": 0.0,
+          "any_target_at_5": null,
+          "page_hit": 0.0,
+          "retrieved_something": null,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [
+            null
+          ],
+          "top_score": 0.7261,
+          "latency_ms": 2.0,
+          "retrieved": [
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.7261
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.603
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.0633
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0395
+            }
+          ]
+        },
+        {
+          "question": "管理费按什么计提，有没有上限？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7818,
+          "latency_ms": 2.5,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.7818
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.5783
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.1541
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1098
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.1054
+            }
+          ]
+        },
+        {
+          "question": "这笔钱借出去最多能借多久？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.7,
+          "latency_ms": 2.2,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.7
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.528
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.2903
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.2486
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.1912
+            }
+          ]
+        },
+        {
+          "question": "把互助资金挪走了要怎么罚？",
+          "category": "同义改写",
+          "source_filename": "05_财务公开办法.md",
+          "source_filenames": [
+            "05_财务公开办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 2,
+          "passage_ranks": [
+            2
+          ],
+          "top_score": 0.7714,
+          "latency_ms": 2.0,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.7714
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.6245
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.5349
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.4485
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3902
+            }
+          ]
+        },
+        {
+          "question": "农户一次最多能从互助资金里借多少钱？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7581,
+          "latency_ms": 2.2,
+          "retrieved": [
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.7581
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.4856
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.4848
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.3444
+            },
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.3113
+            }
+          ]
+        },
+        {
+          "question": "如果是买小型农机具，能多借多少？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 0.7913,
+          "latency_ms": 1.8,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.7913
+            },
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.3
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.0913
+            }
+          ]
+        },
+        {
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "category": "同义改写",
+          "source_filename": "02_互助社实施细则.txt",
+          "source_filenames": [
+            "02_互助社实施细则.txt"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 1,
+          "passage_ranks": [
+            1
+          ],
+          "top_score": 0.7971,
+          "latency_ms": 2.3,
+          "retrieved": [
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.7971
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.5088
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.4167
+            },
+            {
+              "document_id": "a5c4eb46-f9aa-4784-a5eb-e253e5087082",
+              "page": 1,
+              "score": 0.3701
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1913
+            }
+          ]
+        },
+        {
+          "question": "商业银行发行的理财产品最低起购金额是多少？",
+          "category": "应拒答",
+          "source_filename": null,
+          "source_filenames": [],
+          "evidence_mode": "all",
+          "should_refuse": true,
+          "expected_page": null,
+          "recall_at_1": null,
+          "recall_at_3": null,
+          "recall_at_5": null,
+          "all_targets_at_5": null,
+          "any_target_at_5": null,
+          "page_hit": null,
+          "retrieved_something": 1.0,
+          "quote_hit": false,
+          "passage_rank": null,
+          "passage_ranks": [],
+          "top_score": 0.7081,
+          "latency_ms": 2.4,
+          "retrieved": [
+            {
+              "document_id": "9d17a7a9-b9f5-4a42-8713-443bb771bf74",
+              "page": 1,
+              "score": 0.7081
+            },
+            {
+              "document_id": "9af2697a-ea36-4071-b857-11b80334da22",
+              "page": 1,
+              "score": 0.24
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.2168
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.1275
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.1271
+            }
+          ]
+        },
+        {
+          "question": "连着两次没按时还钱会有什么后果？",
+          "category": "同义改写",
+          "source_filename": "01_互助资金管理办法.md",
+          "source_filenames": [
+            "01_互助资金管理办法.md"
+          ],
+          "evidence_mode": "all",
+          "should_refuse": false,
+          "expected_page": 1,
+          "recall_at_1": 0.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0,
+          "all_targets_at_5": 1.0,
+          "any_target_at_5": null,
+          "page_hit": 1.0,
+          "retrieved_something": null,
+          "quote_hit": true,
+          "passage_rank": 3,
+          "passage_ranks": [
+            3
+          ],
+          "top_score": 0.7111,
+          "latency_ms": 3.9,
+          "retrieved": [
+            {
+              "document_id": "ab2bbbd5-72a7-4abd-afa7-cdcfa247a376",
+              "page": 1,
+              "score": 0.7111
+            },
+            {
+              "document_id": "de73845e-c355-4295-b9c1-72b3231e3ab2",
+              "page": 1,
+              "score": 0.5465
+            },
+            {
+              "document_id": "2c58d111-8871-44db-a37f-b17865f91ddf",
+              "page": 1,
+              "score": 0.1933
+            },
+            {
+              "document_id": "5b6b36ea-96ac-4c63-9157-17427de67bd9",
+              "page": 1,
+              "score": 0.0977
+            },
+            {
+              "document_id": "1c92fdfa-9ce0-4c8a-b270-9bbb04f7a194",
+              "page": 1,
+              "score": 0.0956
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reference": {
+    "random_document_hit_at_5": 0.625,
+    "random_page_hit_at_5": 0.625,
+    "chunks_per_document": 1.0
+  },
+  "by_category": {
+    "hybrid-convex-weighted-rerank": {
+      "同义改写": {
+        "examples": 15,
+        "recall_at_3": 0.8666666666666667,
+        "page_hit": 0.9333333333333333,
+        "quote_hit": 0.9333333333333333
+      },
+      "应拒答": {
+        "examples": 1,
+        "recall_at_3": null,
+        "page_hit": null,
+        "quote_hit": null,
+        "retrieved_rate": 1.0,
+        "top_score_median": 0.7081
+      }
+    }
+  }
+}

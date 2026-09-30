@@ -164,17 +164,19 @@ def git_commit() -> str:
         return "unknown"
 
 
-def stage_upload(document_id: str, filename: str) -> Path:
+def stage_upload(document_id: str, filename: str, source_dir: Path = LAW_DIR) -> Path:
     """Place the raw file where the worker looks for it, using its own naming."""
     upload_dir = ROOT / "data" / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     safe_name = re.sub(r"[^\w.\-]", "_", filename)
     target = upload_dir / f"{document_id}_{safe_name}"
-    shutil.copyfile(LAW_DIR / filename, target)
+    shutil.copyfile(source_dir / filename, target)
     return target
 
 
-def ingest_corpus(store, tenant_id: str, kb_id: str, kb_name: str) -> dict[str, str]:
+def ingest_corpus(
+    store, tenant_id: str, kb_id: str, kb_name: str, corpus_dir: Path = LAW_DIR
+) -> dict[str, str]:
     """Import every corpus file through the production worker function."""
     from app.schemas import Document, KnowledgeBase
 
@@ -184,11 +186,11 @@ def ingest_corpus(store, tenant_id: str, kb_id: str, kb_name: str) -> dict[str, 
         )
     )
     by_filename: dict[str, str] = {}
-    for path in sorted(LAW_DIR.iterdir()):
+    for path in sorted(corpus_dir.iterdir()):
         if path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
         document_id = str(uuid4())
-        stage_upload(document_id, path.name)
+        stage_upload(document_id, path.name, corpus_dir)
         store.save_document(
             Document(
                 id=document_id,
@@ -547,8 +549,21 @@ def main() -> None:
         default=GOLDEN_EVAL,
         help="golden set to score: v1 (flat) or v2 (multi-hop, equivalence, refusals)",
     )
+    parser.add_argument(
+        "--corpus",
+        type=Path,
+        default=LAW_DIR,
+        help=(
+            "directory to import as the corpus (default: law/). The CI regression gate points "
+            "this at tests/fixtures/eval_gate/corpus, so the gate runs on committed "
+            "deterministic text instead of the untracked law/ documents."
+        ),
+    )
     args = parser.parse_args()
     golden_path = args.golden if args.golden.is_absolute() else ROOT / args.golden
+    corpus_dir = args.corpus if args.corpus.is_absolute() else ROOT / args.corpus
+    if not corpus_dir.is_dir():
+        raise SystemExit(f"corpus directory not found: {corpus_dir}")
 
     # 先校验配置名：写错一个字母就该立刻失败，而不是等语料导入（约一分钟）跑完才报错。
     selected = CONFIGS
@@ -584,7 +599,9 @@ def main() -> None:
 
     store = create_store(settings.database_url)
     kb_id = str(uuid4())
-    by_filename = ingest_corpus(store, args.tenant, kb_id, args.knowledge_base)
+    by_filename = ingest_corpus(
+        store, args.tenant, kb_id, args.knowledge_base, corpus_dir
+    )
     print(f"staged {len(by_filename)} files, indexing ...")
     index_corpus(list(by_filename.values()))
     chunk_count = len(store.get_chunks(kb_id, "latest"))

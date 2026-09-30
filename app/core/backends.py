@@ -16,7 +16,12 @@ from pymilvus.exceptions import (
 )
 
 from app.config import Settings
-from app.core.embeddings import EmbeddingProvider, create_embedding, embed_text
+from app.core.embeddings import (
+    EmbeddingProvider,
+    create_embedding,
+    embed_many_texts,
+    embed_text,
+)
 from app.core.errors import BackendUnavailableError
 from app.core.ingestion import Chunk
 from app.core.retrieval import Fusion, cosine_similarity, fuse_rankings, retrieve
@@ -75,14 +80,20 @@ class LocalRetriever:
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         if self.mode == "sparse":
-            return retrieve(query, self.chunks, top_k, self.mode)
+            # BM25 needs term statistics, not vectors: this path must not touch the embedding
+            # provider at all (it used to, for every chunk in the corpus).
+            return retrieve(query, self.chunks, top_k, "sparse")
         embedding = self.embedding
         if embedding is None:
-            return retrieve(query, self.chunks, top_k, self.mode)
-        query_vector = await embed_text(embedding, query)
+            return retrieve(query, self.chunks, top_k, self.mode, fusion=self.fusion)
+        # Query and corpus in one batch: the provider then decides how many requests that is
+        # (one for a local model, ceil(n / batch_size) for an HTTP API), and cached vectors
+        # never leave the process.
+        vectors = await embed_many_texts(embedding, [query, *[chunk.text for chunk in self.chunks]])
+        query_vector = vectors[0]
         dense = []
-        for chunk in self.chunks:
-            score = cosine_similarity(query_vector, await embed_text(embedding, chunk.text))
+        for chunk, chunk_vector in zip(self.chunks, vectors[1:], strict=True):
+            score = cosine_similarity(query_vector, chunk_vector)
             if score > 0:
                 dense.append((chunk, score))
         dense.sort(key=lambda item: item[1], reverse=True)

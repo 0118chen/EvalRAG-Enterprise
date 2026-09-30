@@ -123,13 +123,28 @@ def retrieve(
     embedding: SyncEmbedding | None = None,
     fusion: Fusion | None = None,
 ) -> list[tuple[Chunk, float]]:
-    sparse_scores = bm25_scores(query, [chunk.text for chunk in chunks])
-    sparse = [
-        (chunk, score)
-        for chunk, score in zip(chunks, sparse_scores, strict=True)
-        if score > 0
-    ]
-    sparse.sort(key=lambda item: item[1], reverse=True)
+    """Score the corpus in the requested mode - and only that mode.
+
+    The channels are computed lazily on purpose. Computing both up front meant a BM25-only
+    query paid for 386 chunk embeddings on this corpus (BM25 needs term statistics, nothing
+    else), and the hybrid path embedded the corpus twice: once here and once in the dense
+    retriever that called it.
+    """
+    if mode not in {"sparse", "dense", "hybrid"}:
+        raise ValueError(f"unsupported retrieval mode: {mode}")
+
+    sparse: list[tuple[Chunk, float]] = []
+    if mode in {"sparse", "hybrid"}:
+        sparse_scores = bm25_scores(query, [chunk.text for chunk in chunks])
+        sparse = [
+            (chunk, score)
+            for chunk, score in zip(chunks, sparse_scores, strict=True)
+            if score > 0
+        ]
+        sparse.sort(key=lambda item: item[1], reverse=True)
+        if mode == "sparse":
+            return sparse[:top_k]
+
     embedding = embedding or HashEmbedding()
     query_vector = embedding.embed(query)
     dense = []
@@ -138,8 +153,6 @@ def retrieve(
         if score > 0:
             dense.append((chunk, score))
     dense.sort(key=lambda item: item[1], reverse=True)
-    if mode == "sparse":
-        return sparse[:top_k]
     if mode == "dense":
         return dense[:top_k]
     return fuse_rankings(dense, sparse, fusion or Fusion(), top_k)

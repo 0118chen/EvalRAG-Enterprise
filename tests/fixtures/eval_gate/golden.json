@@ -1,0 +1,145 @@
+{
+  "dataset": "eval-gate-fixture",
+  "generated_at": "2026-09-30",
+  "generator": "hand-written for the CI regression gate (tests/fixtures/eval_gate/)",
+  "corpus": "tests/fixtures/eval_gate/corpus（自建合成文本，非真实法规；8 份文件 / 2 种格式，每份 1 个 chunk）",
+  "counts": { "同义改写": 15, "应拒答": 1 },
+  "question_documents": [
+    "01_互助资金管理办法.md",
+    "02_互助社实施细则.txt",
+    "03_风险准备金规定.md",
+    "04_借款合同规范.md",
+    "05_财务公开办法.md",
+    "06_监督检查办法.md",
+    "07_成员资格与出资规定.md",
+    "08_逾期催收规程.md"
+  ],
+  "examples": [
+    {
+      "question": "农户一次最多能从互助资金里借多少钱？",
+      "expected_answer": "不得超过人民币两万元。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "单笔借款额度不得超过人民币两万元",
+      "source_filename": "01_互助资金管理办法.md"
+    },
+    {
+      "question": "如果是买小型农机具，能多借多少？",
+      "expected_answer": "单笔额度可以放宽至人民币三万元。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "用于购置小型农机具的，单笔额度可以放宽至人民币三万元",
+      "source_filename": "01_互助资金管理办法.md"
+    },
+    {
+      "question": "这笔钱借出去最多能借多久？",
+      "expected_answer": "最长不超过十二个月。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "借款期限最长不超过十二个月",
+      "source_filename": "01_互助资金管理办法.md"
+    },
+    {
+      "question": "占用费一年按什么比例收，能不能先扣下来？",
+      "expected_answer": "按借款本金的百分之六按年计收，不得预先扣除。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "互助资金占用费按借款本金的百分之六按年计收，不得预先扣除",
+      "source_filename": "01_互助资金管理办法.md"
+    },
+    {
+      "question": "连着两次没按时还钱会有什么后果？",
+      "expected_answer": "自最后一次逾期之日起三年内不得再次申请借款。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "自最后一次逾期之日起三年内不得再次申请借款",
+      "source_filename": "01_互助资金管理办法.md"
+    },
+    {
+      "question": "想借钱要先经过谁同意，怎么表决？",
+      "expected_answer": "由村互助社理事会集体审议，实行一人一票。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "借款申请应当由村互助社理事会集体审议，实行一人一票",
+      "source_filename": "02_互助社实施细则.txt"
+    },
+    {
+      "question": "管理费按什么计提，有没有上限？",
+      "expected_answer": "按借款余额的百分之一按年计提，全年不得超过实际支出总额。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "互助社的管理费按借款余额的百分之一按年计提，全年不得超过实际支出总额",
+      "source_filename": "02_互助社实施细则.txt"
+    },
+    {
+      "question": "资金使用情况多久要让成员看一次，至少看多久？",
+      "expected_answer": "每季度公示一次，公示期不得少于七天。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "互助社应当每季度公示一次资金使用情况，公示期不得少于七天",
+      "source_filename": "02_互助社实施细则.txt"
+    },
+    {
+      "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+      "expected_answer": "按借款余额的百分之三计提。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "按借款余额的百分之三计提风险准备金",
+      "source_filename": "03_风险准备金规定.md"
+    },
+    {
+      "question": "欠了多久以后可以用这笔钱把账核销掉？",
+      "expected_answer": "逾期超过一百八十日仍未收回的，可以用风险准备金予以核销。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "可以用风险准备金予以核销",
+      "source_filename": "03_风险准备金规定.md"
+    },
+    {
+      "question": "借款合同要签几份，谁各留一份？",
+      "expected_answer": "一式三份，借款人、互助社和村务监督委员会各持一份。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "一式三份，借款人、互助社和村务监督委员会各持一份",
+      "source_filename": "04_借款合同规范.md"
+    },
+    {
+      "question": "把互助资金挪走了要怎么罚？",
+      "expected_answer": "除追回资金外，还应当按挪用金额的百分之二十缴纳违约金。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "按挪用金额的百分之二十缴纳违约金",
+      "source_filename": "05_财务公开办法.md"
+    },
+    {
+      "question": "检查发现的问题要在多久内改完？",
+      "expected_answer": "在收到整改通知书之日起六十日内完成整改。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "应当在收到整改通知书之日起六十日内完成整改",
+      "source_filename": "06_监督检查办法.md"
+    },
+    {
+      "question": "想入社第一次至少要出多少钱？",
+      "expected_answer": "成员首次出资额不得低于人民币五百元。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "成员首次出资额不得低于人民币五百元",
+      "source_filename": "07_成员资格与出资规定.md"
+    },
+    {
+      "question": "催收的时候有哪些做法是被禁止的？",
+      "expected_answer": "不得采取威胁、侮辱、公开借款人姓名等方式。",
+      "page": 1,
+      "category": "同义改写",
+      "evidence_quote": "不得采取威胁、侮辱、公开借款人姓名等方式",
+      "source_filename": "08_逾期催收规程.md"
+    },
+    {
+      "question": "商业银行发行的理财产品最低起购金额是多少？",
+      "category": "应拒答",
+      "should_refuse": true,
+      "why_unanswerable": "夹具语料只有村级互助资金的管理办法、实施细则、风险准备金、合同、公开、监督、成员出资与催收规定，不含任何理财产品或商业银行销售规则。"
+    }
+  ]
+}

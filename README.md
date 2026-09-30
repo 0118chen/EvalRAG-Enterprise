@@ -88,6 +88,17 @@ python -m scripts.probe_fusion --database data/experiments/golden-v2-fusion.db \
     --golden law/golden_eval_v2.json
 ```
 
+检索质量门禁（CI 每次提交都跑；用提交进仓库的小夹具语料，不依赖 `law/` 里的原文）：
+
+```bash
+python -m scripts.run_golden_experiment --corpus tests/fixtures/eval_gate/corpus \
+    --golden tests/fixtures/eval_gate/golden.json \
+    --configs sparse-bm25,dense-hash,hybrid-rrf,hybrid-convex-weighted,hybrid-convex-weighted-rerank \
+    --json /tmp/eval-gate.json --database /tmp/eval-gate.db
+python -m scripts.check_eval_regression --baseline tests/fixtures/eval_gate/baseline.json \
+    --current /tmp/eval-gate.json --tolerance 1e-6
+```
+
 结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
 v1 标注 52/52 可回验，但指标已饱和（18 份语料上**纯 BM25** 就在文档级/页级拿满分，重排增益归零），
 且本地 32 维 hash 向量使 hybrid 反而低于纯 BM25；v2 去掉"问题里报法规名"的词面泄漏后
@@ -99,6 +110,9 @@ v1 标注 52/52 可回验，但指标已饱和（18 份语料上**纯 BM25** 就
 （同一配置跑出过 0.550 与 0.700），并给语义重排（TypeSafe，可选后端、默认关闭）接上
 用量与花费记账——难集 R@1 0.646 → **0.769**（单跳 37/52 → 45/52，纯 BM25 是 38/52），
 v3 0.850 → **0.950**（page_hit 1.000）；多跳题一道没涨，因为重排改不了候选集。
+**§12** 修掉了查询管线的结构性重复劳动（`sparse` 每查询 387 次嵌入 → **0**、`hybrid` 774 → 稳态
+**1**、p50 1102 → 194 ms，**质量指标逐位不变**），**§13** 把质量门禁装进了 CI
+（夹具语料跑真实链路 + 逐项比对基线，注入回归验证过会拦）。
 
 ```bash
 python -m app.cli run-evaluation <evaluation_id>

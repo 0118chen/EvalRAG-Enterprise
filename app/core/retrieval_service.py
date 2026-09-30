@@ -39,6 +39,12 @@ class RetrievalService:
         self.cache = cache
         self.query_rewriter = query_rewriter
         self.reranker = reranker
+        # Built retrievers, keyed by (knowledge base, version, mode, fusion, corpus
+        # fingerprint). Entries are cheap (the vectors live in the shared embedding cache),
+        # and 32 leaves room for the whole evaluation matrix without evicting mid-run.
+        self._retrievers: dict[tuple[str, str, str, str | None, str], Retriever] = {}
+
+    RETRIEVER_CACHE_SIZE = 32
 
     async def search(
         self,
@@ -78,13 +84,7 @@ class RetrievalService:
             metadata=metadata,
             inputs={"question": question, "top_k": top_k},
         ) as retrieval_span:
-            corpus_hash = hashlib.sha256()
-            for chunk in chunks:
-                corpus_hash.update(chunk.id.encode("utf-8"))
-                corpus_hash.update(chunk.version.encode("utf-8"))
-                corpus_hash.update(
-                    hashlib.sha256(chunk.text.encode("utf-8")).digest()
-                )
+            corpus_fingerprint = self._corpus_fingerprint(chunks)
             key = cache_key(
                 "retrieval",
                 {
@@ -104,7 +104,7 @@ class RetrievalService:
                     "sparse_backend": self.settings.sparse_retrieval_backend,
                     "milvus_collection": self.settings.milvus_collection,
                     "elasticsearch_index": self.settings.elasticsearch_index,
-                    "corpus_fingerprint": corpus_hash.hexdigest(),
+                    "corpus_fingerprint": corpus_fingerprint,
                 },
             )
             cached = await self.cache.get(key)
@@ -149,6 +149,7 @@ class RetrievalService:
                 knowledge_base_id,
                 document_version,
                 fusion,
+                corpus_fingerprint,
             )
             with self.traces.span(
                 "retrieval.rank",
@@ -211,6 +212,16 @@ class RetrievalService:
                 document_version=document_version,
             )
 
+    @staticmethod
+    def _corpus_fingerprint(chunks: list[Chunk]) -> str:
+        """Hash of chunk ids, versions and text - the corpus identity a cache key needs."""
+        digester = hashlib.sha256()
+        for chunk in chunks:
+            digester.update(chunk.id.encode("utf-8"))
+            digester.update(chunk.version.encode("utf-8"))
+            digester.update(hashlib.sha256(chunk.text.encode("utf-8")).digest())
+        return digester.hexdigest()
+
     def _build_retriever(
         self,
         chunks: list[Chunk],
@@ -218,8 +229,21 @@ class RetrievalService:
         knowledge_base_id: str,
         document_version: str | None,
         fusion: str | None = None,
+        corpus_fingerprint: str | None = None,
     ) -> Retriever:
-        return create_retriever(
+        """Reuse the built retriever while the corpus is unchanged.
+
+        Rebuilding per query meant re-embedding the whole corpus on every request (and, for the
+        HTTP embedding backends, re-creating a client per chunk). The fingerprint is what makes
+        reuse safe: any change to chunk ids, versions or text yields a different key, so a stale
+        index cannot be served.
+        """
+        fingerprint = corpus_fingerprint or self._corpus_fingerprint(chunks)
+        key = (knowledge_base_id, document_version or "", mode, fusion, fingerprint)
+        built = self._retrievers.get(key)
+        if built is not None:
+            return built
+        retriever = create_retriever(
             self.settings,
             chunks,
             mode,
@@ -227,3 +251,7 @@ class RetrievalService:
             document_version,
             fusion_from_name(fusion) if fusion else None,
         )
+        self._retrievers[key] = retriever
+        while len(self._retrievers) > self.RETRIEVER_CACHE_SIZE:
+            self._retrievers.pop(next(iter(self._retrievers)))
+        return retriever
