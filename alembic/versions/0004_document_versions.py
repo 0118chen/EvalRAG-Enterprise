@@ -42,3 +42,9 @@ def downgrade() -> None:
     indexes = {index["name"] for index in inspector.get_indexes("chunks")}
     if "ix_chunks_version" in indexes:
         op.drop_index("ix_chunks_version", table_name="chunks")
+    # Dropping the index is not enough: the `version` columns are introduced here, so a
+    # downgrade that keeps them does not restore the schema 0003 had.
+    for table in ("chunks", "documents"):
+        columns = {column["name"] for column in inspector.get_columns(table)}
+        if "version" in columns:
+            op.drop_column(table, "version")

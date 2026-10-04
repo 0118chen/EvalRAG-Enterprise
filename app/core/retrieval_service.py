@@ -55,7 +55,7 @@ class RetrievalService:
         chunks: list[Chunk],
         top_k: int,
         mode: str,
-        document_version: str | None = "latest",
+        document_version: str | None = None,
         rerank: bool | None = None,
         query_rewrite: bool | None = None,
         fusion: str | None = None,
