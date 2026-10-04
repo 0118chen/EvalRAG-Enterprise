@@ -11,6 +11,9 @@
 - 文档处理进度、失败原因和版本管理。
 - Hybrid、Dense、Sparse 检索。
 - SSE 流式回答、页码和分数引用、用户反馈。
+  回答里的引用会逐条对照本次检索到的 (文档, 页码)：出现未检索到的文档或页码时，回答被拒绝而不是
+  照常返回；流式路径因为已发出的 token 无法撤回，改为以 `event: error`（`ungrounded_citation`）收尾。
+  "完全不带引用"默认不算拒绝（mock 与部分本地模型不写引用），可用 `CITATION_REQUIRED=true` 收紧。
 - Vue 工作台覆盖知识库、文档、问答和运行诊断。
 
 ### 阶段二：统一 RAG Trace
@@ -26,11 +29,22 @@
 - 持久化评测数据集，每个样例包含问题、期望文档、页码、证据引文和类别。
 - 本地 Experiment 一次检索同时计算 Recall@{1,3,5}、Precision@K、MRR、nDCG@{3,5} 和页码命中率，
   并给出 `latency_ms_p50/p95`（同一排名算多个截断点，避免重跑导致的候选池变化）。
+- **口径说明（2026-10-04 修正）**：多跳题的 `nDCG@k` 现按理想排名（IDCG）归一，完美排名得 1.0
+  （此前除以跳数，两跳上限 0.8155）；`mode="any"` 等价多标签题的 `recall@k` 与 `any_target@k` 一致，
+  不再把命中任一等价标签记成 1/3。`docs/evaluation/*.json` 里 2026-09-28 及更早的产物仍是**旧口径**，
+  重跑命令见各节；CI 质量门禁不受影响（夹具全为单跳题，逐项差值 0）。
 - 带证据引文的样例额外计算 passage 级指标（`passage_hit`/`passage_at_1`/`passage_mrr` 与每题 `passage_rank`）：
   文档级指标在少量文档上会饱和，passage 级才能看出"答段排在第几"。
 - 支持多跳样例（`expected_evidence`：每题一跳一个引文，另计严格的 `all_targets@k`）与应拒答样例
   （`should_refuse`：不参与检索指标，单独报 `negative_retrieved_rate`）。
 - Celery 异步执行实验，结果保存到数据库；每条 retrieved 记录带 `chunk_id` 与 `text`，结果可复核。
+- **执行方式（2026-10-05 起）**：有界并发（`EVALUATION_CONCURRENCY=4`，每题一次检索 + 可选两次 LLM
+  调用，串行跑 75 题是分钟到小时级的差别）+ 每题超时（`EVALUATION_EXAMPLE_TIMEOUT_SECONDS=120`，
+  卡死的题记为 `timed_out`、不进任何均值，另有 `timed_out_example_count` 说明几个数参与了平均）
+  + 逐题 checkpoint：每完成一题就把该题的行写进 `results.examples`，所以失败/重试时
+  `GET /evaluations/{id}` 能看到进度，Celery 用同一个 evaluation_id 重跑只补跑缺的题
+  （`results.progress` 报 `completed/total/resumed`）。checkpoint 带实验指纹（题集、检索设置、
+  rag/prompt 版本），换了设置就整轮重跑，不会把两套设置的逐题行混在一起。
 - 可选同步 Dataset 到 LangSmith，并使用 LangSmith `evaluate` 执行 Experiment。
 - CLI 支持运行实验和同步 Dataset。
 
@@ -99,6 +113,50 @@ python -m scripts.check_eval_regression --baseline tests/fixtures/eval_gate/base
     --current /tmp/eval-gate.json --tolerance 1e-6
 ```
 
+配置之间的差值是显著的吗（配对 bootstrap，只用已提交的产物、不需要语料）：
+
+```bash
+# 每个配置对上参考配置，逐题配对重采样 2000 次，给出 95% 区间与「一道题值多少 pp」
+python -m scripts.bootstrap_ci --artifact docs/evaluation/golden-set-v3-fusion-2026-09-28.json \
+    --against sparse-bm25 --json /tmp/bootstrap.json
+```
+
+题集有多少题，差值就有多粗：v3 只有 20 题，**一道题 = 5pp**，于是"分数式+加权"相对纯 BM25 的
+R@1 +0.050 的 95% 区间是 `[+0.000, +0.150]` ——**跨 0，判为 inconclusive**，只能说"多中一道题"，
+不能说"更好"；同题集上 dense-hash 的 -0.500（区间 `[-0.800, -0.200]`）才是真差异。工具还会
+把逐题均值与产物里已发布的总量对账，不一致就告警（历史产物按不同分母平均过）。这个区间只覆盖
+"题集抽样"这一项不确定性，不含标注错误，也不含"题目与证据出自同一次模型调用"这件事。
+
+本地检索的一次性成本与重复成本（合成语料，任何人可复现）：
+
+```bash
+python -m scripts.benchmark_local_retrieval --documents 400 --queries 20
+```
+
+答案质量评测与裁判审计（默认关闭；每题会调两次付费模型）：
+
+```bash
+# 生成答案 + 裁判打分，并把裁判看过的 ≤3 块证据写进产物（人工复核必须看得到证据）
+python -m scripts.run_golden_experiment --corpus tests/fixtures/eval_gate/corpus \
+    --golden tests/fixtures/eval_gate/golden.json --configs sparse-bm25,sparse-bm25-rerank \
+    --answer-evaluation --json docs/evaluation/answer-quality-eval-gate-2026-10-05.json
+# 人工标签 vs 裁判：Cohen's kappa + bootstrap 区间（--dump-sample 先生成待标模板）
+python -m scripts.judge_agreement --artifact docs/evaluation/answer-quality-eval-gate-2026-10-05.json \
+    --labels docs/evaluation/judge-agreement-labels-2026-10-05.json --json /tmp/agreement.json
+# 扰动校准：往正确答案里植入一句语料里根本没有的"规则"，看裁判会不会降 faithfulness
+python -m scripts.judge_calibration --artifact docs/evaluation/answer-quality-eval-gate-2026-10-05.json \
+    --json /tmp/calibration.json
+```
+
+实测（`deepseek-chat`，8 篇夹具语料、16 题、2 个配置 = 32 行，p50 约 3.5s/题）：
+correctness 与人工标注的 **kappa = 1.000**、completeness = 1.000，但 **faithfulness = 0.000**
+（人工认为"证据里确实没有该条款时拒答"是忠实的，裁判给 0 分）。32 行里裁判的三个维度只有两种
+取值（28 行 `(1,1,1)`、4 行 `(0,0,0)`），**从未分离**。扰动校准连续三次都是
+**`fabrications_flagged = 0/16`**：裁判的 reason 里明明写着"额外补充了证据中不存在的第三十三条
+内容"，却仍给 0.5/1.0，理由是"不影响对核心问题的忠实度，且未与证据冲突"。⇒ 这个裁判可以用来
+粗筛"答对了没有"，**不能**用来证明"有依据"；相关限制与取舍见
+[`docs/priority-fixes.md`](docs/priority-fixes.md) 事项三十四。
+
 结论与"能写/不能写"的边界见 [`docs/evaluation-report.md`](docs/evaluation-report.md)：
 v1 标注 52/52 可回验，但指标已饱和（18 份语料上**纯 BM25** 就在文档级/页级拿满分，重排增益归零），
 且本地 32 维 hash 向量使 hybrid 反而低于纯 BM25；v2 去掉"问题里报法规名"的词面泄漏后
@@ -137,6 +195,10 @@ curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 - Dataset 创建、列表和详情接口。
 - Evaluation 创建、状态、结果和基线对比接口。
 - 前端支持 Dataset 编辑、实验配置、异步进度、指标卡片、逐题结果和基线差值。
+- 前端拆分为 `frontend/src/components/` 下的 8 个面板组件 + 3 个可测模块（`sse.ts` 流式分帧、
+  `auth.ts` 凭据存储、`metrics.ts` 指标标签与格式），由 `npm test`（vitest，32 项）覆盖；
+  API Key 默认只在当前页面内存中，勾选"在本标签页内记住密钥"后写入 sessionStorage，
+  关掉标签页即失效，历史上写进 localStorage 的旧键在加载时被删除而不迁移。
 
 ### 阶段五：企业级检索
 
@@ -144,7 +206,7 @@ curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 - 可插拔 Query Rewrite，本地默认使用规则扩展。
 - 可插拔 Reranker，本地默认使用词项覆盖与融合分数重排。
 - 支持 Milvus 和 Elasticsearch 适配边界。
-- 文档和 Chunk 版本过滤。
+- 文档和 Chunk 版本过滤（`document_version` 缺省表示不过滤、即全部版本；填具体标签则只搜该标签）。
 - Memory/Redis 检索缓存。
 - Retriever、Reranker 和缓存故障时自动降级。
 
@@ -297,7 +359,8 @@ Windows PowerShell：
 ```bash
 ruff check app tests alembic scripts
 pytest -q
-cd frontend && npm run build
+cd frontend && npm run build   # vue-tsc --noEmit + vite build
+cd frontend && npm test        # vitest：SSE 分帧、密钥存储、指标格式、两个面板（32 项）
 ```
 
 LangSmith 仅发送脱敏 metadata、问题文本、文档 ID、页码和受控摘要，不上传完整原文。

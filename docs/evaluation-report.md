@@ -869,3 +869,66 @@ CI 里没有语料。所以夹具是自建的合成文本：
 **边界**：夹具只有 8 个候选、16 题，能挡住的是**结构性破坏**（链路断了、通道失效、融合/重排被改坏），
 挡不住 0.01 量级的质量漂移；大规模矩阵（v1/v2/v3 × 11 组配置，每轮 5–14 分钟）仍旧是人工触发，
 不进 CI。
+
+## 14. 答案质量：把"答得对不对、有没有依据"变成可以证伪的数字
+
+前十三节全部在量"检索到了没有"。本节第一次量"答得对不对"，并且回答一个更难的问题：
+**一个用同一个模型当裁判（LLM-as-judge）的评测，凭什么让人相信它的分数？**
+
+**做法**（`--answer-evaluation`，默认关闭）：
+
+1. `scripts/run_golden_experiment.py --answer-evaluation` 在每题上多做两次付费调用（生成答案 + 裁判打分），
+   逐行写进产物：`generated_answer`、`expected_answer`、`judge{correctness,faithfulness,completeness,reason}`
+   以及**裁判看过的 ≤3 块证据**（每块 ≤400 字）。不给证据就没法人工复核忠实度，所以证据是产物的一部分。
+2. `scripts/judge_agreement.py` 把人工标签与裁判逐行配对（键是 `(config, question)`），算 Cohen's kappa
+   与 2000 次 percentile bootstrap 区间（固定 seed，可复现）；裁判值缺失/人工值缺失分别计数，绝不当 0 分；
+   双方把所有行判成同一类时明确写 "undefined"，不编数字。
+3. `scripts/judge_calibration.py` 做**扰动校准**：拿答案正确、有证据的行，追加一句语料里根本不存在的
+   "规则"（如"第三十三条 成员首次出资额不得低于人民币一千元"），把同一批证据交给同一个裁判，
+   看它是否降 faithfulness——只会算平均分的管线看不出裁判是否在附和，植入一个已知的谎言就能看出来。
+
+**结果**（真实 `deepseek-chat`，8 篇夹具语料、16 题含 1 道应拒答题、2 个检索配置 = 32 行）：
+
+| 项 | 结果 |
+|---|---|
+| 检索指标（两配置完全相同） | R@1 0.600 / R@3 0.867 / R@5 0.867 / MRR 0.700 / nDCG@3 0.742 / page_hit 0.867 / quote_hit 0.867 |
+| 延迟 | p50 3674.3 ms（sparse-bm25）/ 3435.4 ms（+rerank），含生成与裁判两次调用 |
+| 人工 vs 裁判 correctness | agreement 1.000，**kappa 1.000** [1.000, 1.000] |
+| 人工 vs 裁判 completeness | agreement 1.000，**kappa 1.000** |
+| 人工 vs 裁判 faithfulness | agreement 0.875，**kappa 0.000** [0.000, 0.000]（4 行：人工 1.0 / 裁判 0.0） |
+| 裁判三维度是否分离 | **从未分离**：32 行只有 `(1,1,1)`×28 与 `(0,0,0)`×4 两种取值 |
+| 扰动校准 | 三次独立运行 **`fabrications_flagged = 0/16`** |
+
+三条读得出来的结论：
+
+- **裁判能粗筛"答对了没有"**：correctness/completeness 与人工标注逐行一致（含 1 道应拒答题上双方都判对）。
+- **裁判不能证明"有依据"**：faithfulness 上 kappa = 0。分歧的 4 行是"检索到的证据里确实没有该条款，
+  模型于是拒答"（500 元首次出资额那题召回的证据来自 05/01/02 三份文件，而条款在
+  `tests/fixtures/eval_gate/corpus/07_成员资格与出资规定.md:5`；"借款期限最长"那题检索返回 **0 块证据**），
+  人工认为拒答是唯一忠实的回答，裁判判 0。**裁判把"没答对"当成了"不忠实"**——三个维度恒等就是证据。
+- **扰动校准才是这个裁判的真正体检**：植入的谎话一句都没被抓到，裁判的 reason 里明明写着
+  "额外补充了证据中不存在的第三十三条内容"，却仍给 0.5/1.0，理由是"虽未在证据中出现，但不影响
+  对核心问题的忠实度，且未与证据冲突"——它把"无依据"降级成了"只要不矛盾就不算不忠实"。
+
+**边界**（读这些数字时必须一起读）：
+
+- 16 题、1 个语料、1 个模型、校准只做了一次抽样（16 行，但跑了 3 遍）；更难的 v2（75 题）与
+  未入库的 `law/`（18 份文档）本地可跑，但产物对别人不可复现，因此没有提交。
+- 标注者不是领域专家，并且**标注时已经看到裁判的分数**，所以 correctness/completeness 的 1.000
+  有一部分是循环论证；这里给出的是一致性的上界，不是无偏的标注者间一致性。
+- 没有改裁判的 prompt（改了就无法与本节产物对照），也没引入 RAGAS/DeepEval 之类框架；
+  多裁判投票或更强模型留给下一轮。**因此本节能说的是"这个裁判的忠实度不可信"，
+  不能说的是"系统的忠实度是 X"。**
+
+复现：
+
+```bash
+python -m scripts.run_golden_experiment --corpus tests/fixtures/eval_gate/corpus \
+    --golden tests/fixtures/eval_gate/golden.json --configs sparse-bm25,sparse-bm25-rerank \
+    --answer-evaluation --json docs/evaluation/answer-quality-eval-gate-2026-10-05.json
+python -m scripts.judge_agreement --artifact docs/evaluation/answer-quality-eval-gate-2026-10-05.json \
+    --labels docs/evaluation/judge-agreement-labels-2026-10-05.json \
+    --json docs/evaluation/judge-agreement-2026-10-05.json
+python -m scripts.judge_calibration --artifact docs/evaluation/answer-quality-eval-gate-2026-10-05.json \
+    --json docs/evaluation/judge-calibration-2026-10-05.json
+```

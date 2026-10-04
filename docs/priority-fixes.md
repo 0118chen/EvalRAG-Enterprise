@@ -596,9 +596,328 @@
 - 仍存在的限制：夹具只有 8 个候选、16 题，挡得住**结构性破坏**，挡不住 0.01 量级的质量漂移；
   大规模矩阵（v1/v2/v3 × 11 组配置，每轮 5–14 分钟）仍是人工触发，不进 CI。
 
+## 已完成事项复盘（2026-10-04：指标口径与引用可核验性）
+
+### 事项二十六：`document_version` 的默认值语义
+
+- 根因：见 P1 清单里该条的复现记录。`"latest"` 被当成等值过滤器，于是"没写版本"等于"只搜 label 恰好是 latest 的 chunk"，
+  用显式版本上传的文档在默认查询下永远检索不到，而且没有任何地方说明原因。
+- 设计选择：默认值改为 `None`，语义是"不过滤版本"；空字符串（前端输入框留空）在 Pydantic `mode="before"` 校验器里
+  归一为 `None`，避免"版本名叫空串"这种不存在的第三态。`"latest"` 保留为**字面标签**，仍可精确指定。
+  `app/core/retrieval_service.py` 与 `EvaluationRunner` 的默认值同步改成 `None`，前端 `queryVersion` 初值与回填改为空串、
+  请求体发 `null`，与同页"空 = 全部版本"的展示逻辑一致。
+- 替代方案与取舍：另一种修法是让 `latest` 解析为"每个文档的最大版本"，但那要求给版本定义全序——
+  版本是任意字符串（`v9`、`2026-09`），没有可靠的大小关系，只能靠文档的创建时间间接推断，
+  等于把"标签"偷偷变成"查询语义"。选默认不过滤，代价是同一文档的多版本会同时进候选池（返回重复内容），
+  收益是默认行为不再静默丢数据。
+- 新增测试：`tests/test_document_versions.py`（默认命中 `v9` 文档、显式版本仍过滤、空白版本视为不过滤、schema 默认值）。
+- 验证命令及结果：`pytest tests/test_document_versions.py` → 4 passed；全量 267 passed, 1 skipped。
+- 仍存在的限制：多版本语料的"只看最新"需要调用方显式传版本；`latest` 这个字面标签没有任何特殊含义，
+  容易让使用者误以为它代表"最新"——README 与前端提示需要明确这一点。
+
+### 事项二十七：引用校验从空壳变成真校验
+
+- 根因：`app/core/citations.py::validate_citations` 只判断"答案非空且证据非空"，函数名与 docstring 承诺的
+  "每个引用都要属于检索证据"从未实现；流式路径（`app/core/rag.py::stream_with_evidence`）根本不校验。
+  于是模型编造一个不存在的文档/页码时，用户看到的仍是一段**看起来有出处**的回答。
+- 设计选择：`citation_report(answer, evidence)` 解析 `[...]` 片段，判定规则刻意保守——
+  只有"文档名命中本次检索"或"带显式页码标记"才算一次引用，`[1]`、`[注]`、`[附件二]` 一律当普通文字，
+  避免误杀正确答案。命中不了的算 `unknown`，文档对但页码未检索到的算 `ungrounded`，两者任一非空即拒答。
+  "完全没引用"不算完整性问题（mock/本地模型本来就不引用），要强制引用由 `Settings.citation_required` 打开。
+- 替代方案与取舍：可以让"必须带引用"成为默认，但那样 mock 与多数本地模型的回答会被全量拒答，
+  把配置问题伪装成模型问题；也可以只在提示词里要求引用格式，但提示词约束不了幻觉。
+  流式路径无法撤回已发出的 token，所以改为在结尾发 `event: error` + `code=ungrounded_citation`，
+  不发 `trace` 事件，与生成失败的终态保持一致。
+- 新增测试：`tests/test_citations.py`（11 项：6 种页码写法、4 种普通括号不被误判、文档/页码幻觉、空答案、无证据）、
+  `tests/test_rag.py`（拒答与非流式返回）、`tests/test_chat_stream.py::test_chat_stream_reports_an_answer_that_cites_unretrieved_evidence`。
+- 验证命令及结果：`pytest tests/test_citations.py tests/test_rag.py tests/test_chat_stream.py` → 全绿。
+- 仍存在的限制：只校验引用的**存在性**，不校验引用与被引段落的语义一致性（引用真实但断章取义仍会通过）；
+  `citation_required` 默认关闭，所以默认配置下"零引用的回答"仍会返回。
+
+### 事项二十八：nDCG 归一化与 any 模式的 recall 口径
+
+- 根因一：`ndcg_at_k` 对每个期望跳取 `1/log2(rank+1)` 后**除以跳数**，是 `DCG/n` 而不是 `DCG/IDCG`。
+  两跳不可能同时排第一，所以两跳题的满分是 `(1 + 1/log2 3)/2 = 0.8155`，三跳题是 0.7103——
+  一个**完美排名也拿不到 1** 的指标被当作 nDCG 发布。
+- 根因二：`recall_at_k` 忽略 `mode`。等价多标签题（`mode="any"`）的标签是可互换的，
+  按"命中标签比例"算会把一个**完全正确**的回答记成 1/3。
+- 设计选择：nDCG 改为除以 `IDCG = Σ_{i=1..min(n,k)} 1/log2(i+1)`（`any` 模式下理想排名为 1，IDCG = 1）；
+  `recall_at_k` 在 `any` 模式下与 `any_target_at_k` 一致（全有或全无），`all` 模式保持集合召回。
+  同时给 `precision_at_k` 补上口径说明：它是"passage 命中数 / k"对文档级标签，属于代理指标，没有任何已发布表格使用它。
+- 替代方案与取舍：也可以把这个指标改名成 `dcg@k` 并保留原算法，但那样"0.83 的 nDCG"仍需每次解释，
+  且跨数据集不可比；归一化是更小的认知负担，代价是历史产物里该列数值会变（见下）。
+- 新增测试：`tests/test_evaluation.py`（完美排名必须得 1.0、某跳滑落后落在 0.9–0.95 且小于 1）、
+  `tests/test_evaluation_evidence_mode.py`（any 模式 recall@2 = 1.0，recall@1 = 0.0）。
+- 验证命令及结果：CI 门禁实测**未受影响**——`check_eval_regression --tolerance 1e-6` 全部 `+0.0000`、exit 0，
+  因为夹具的 16 题全是单跳、无 any 模式，两种口径下数值相同。
+- 仍存在的限制：`docs/evaluation/*.json` 里已提交的 v1/v2/v3 产物仍是**旧口径**算出来的，
+  多跳题的 `ndcg_at_*` 与 any 模式题的 `recall_*` 与当前代码不一致；重生成需要未入库的 `law/` 原文与 5–14 分钟，
+  本轮**没有**重跑。要用新口径复核历史结论请重跑对应命令。
+
+### 事项二十九：指标标签基数与延迟直方图
+
+- 根因一：`MetricsMiddleware` 把 `request.url.path` 直接当标签，`/api/v1/documents/<uuid>` 每个文档 id
+  都新建一条时间序列，进程内 `Counter` 无界增长，`/metrics` 随时间越拉越长。
+- 根因二：延迟只输出 `_sum`，没有 `_count` 与 `_bucket`，Prometheus 算不出 P95，"阶段六：Prometheus /metrics"的承诺是空的。
+- 设计选择：标签改用路由模板（`scope["route"].path`，回退到用 `path_params` 重建，再回退到正则归一化），
+  并补 `status` 维度；延迟改为固定桶的直方图（11 个桶 + `+Inf` + `_count`/`_sum`），
+  渲染时把非累积桶转成累积桶。404 这类没有模板的路径由 `normalize_path` 收敛。
+- 替代方案与取舍：没有引入 `prometheus_client`（会新增依赖并把标签基数问题留给使用者），
+  仍然手写渲染；代价是自己维护桶定义与转义，收益是零依赖且行为完全可测。
+- 新增测试：`tests/test_metrics.py`（`normalize_path` 只收敛标识符、5 个不同 UUID 只产生 1 条时间序列、
+  桶累积值与 `_count`/`_sum`、经真实中间件的 `{document_id}` 标签、未匹配路由被收敛）。
+- 验证命令及结果：`pytest tests/test_metrics.py` → 6 passed。
+- 仍存在的限制：仍是单进程计数（多 worker 需要 `prometheus_client` 的 multiprocess collector）；
+  `/metrics` 自身没有鉴权，生产改为 Nginx 层按私有网段 allow/deny。
+
+### 事项三十：测试隔离、门禁退出码与两处数据/代码缺陷
+
+- 根因一（测试不隔离）：`tests/test_app.py` 用模块级 `TestClient(app)`，而 `app` 会从开发者 `.env` 读配置，
+  于是测试写进真实的 `data/evalrag.db`，还会继承真实的 LLM/LangSmith key（跑一次测试会发出付费 trace）。
+- 根因二（门禁会撒谎）：`scripts/check_eval_regression.py` 的成功行含 `✓`，在 GBK 控制台/管道下
+  `UnicodeEncodeError`，把一次**通过**的质量门禁变成 exit 1。
+- 根因三（数据与消费端）：`law/golden_eval_v2.json` 里有一道题重复出现（同一句"这份规定从哪一天开始正式生效？"
+  问的是两部不同法规），而 harness 用 `{question: example}` 建索引，两行里有一行被**按另一行的标签打分**；
+  重复检测只存在于 v1 的审计路径，生成集这条路径没有。
+- 设计选择：测试改用 `tests/conftest.py` 的 `isolated_settings()/client` 夹具，数据库是
+  私有共享缓存内存库（不落盘、跨连接同构）；门禁脚本在导入时把 `stdout/stderr` 的编码错误策略改为 `replace`，
+  **降级字符而不降级退出码**；审计脚本给生成集补上 `duplicate_questions`/`unique_questions`；
+  harness 改为按 `example_id` 建索引（runner 本来就逐行回传该字段），并删掉仓库里不可导入的死文件 `evaluation`
+  （与 `evaluation.py` 内容重复，`tests/test_langsmith_runner.py` import 的是后者）。
+- 替代方案与取舍：也可以给重复题改文案再重生成 v2，但那会让所有已发布数字失去可比基线；
+  按 id 建索引既修正了误归因，又保留了两道题各自有效（同一问题问两部法规，答案不同）的覆盖。
+  代价是审计现在会**报告**重复（v2 仍会打印 `duplicates: 1`），需要人工判断是否要改文案。
+- 新增测试：`tests/test_golden_experiment_keying.py`（同题不同标签各自计分、命中对方法规时判定为未命中、
+  统计里两道题都计入）。
+- 验证命令及结果：`python -m scripts.audit_golden_set` 现在对 v2 报 `unique questions: 74 (duplicates: 1)`，
+  v1/v3 为 0；`check_eval_regression` → exit 0（修复前同一次通过会 exit 1）；
+  全量 `pytest` → 267 passed, 1 skipped；`ruff check app tests alembic scripts` → All checks passed。
+- 仍存在的限制：v2 的重复题**没有**改写也没有重生成产物，只在审计里可见；
+  `scripts/check_eval_regression.py` 仍只拦回归、放过改善（改善会打印提示）。
+
+## 已完成事项复盘（2026-10-05：真实并发、可逆迁移、类型与覆盖率门禁）
+
+### 事项三十一：跨进程幂等只在顺序下验证过，以及 4/10 个迁移的 downgrade 不是"逆"
+
+- 根因一（并发）：`store.claim_document` 用单条条件 UPDATE 实现"同一份文档只会被一个 worker 认领"，
+  但此前只用顺序调用验证过；没有真线程、真多连接、也没有在同一时刻同时进入的场景。
+- 根因二（迁移）：10 个 Alembic 修订版本里 4 个的 `downgrade()` 只做了一半——
+  `0001_initial` 漏删自己创建的 `feedback`（含索引）与 `evaluations`；
+  `0003_evaluation_datasets` 漏删它加到 `evaluations` 的 7 个列与 3 个索引；
+  `0004_document_versions` 漏删 `documents.version`/`chunks.version`；
+  `0005_feedback_tenant` 漏删 `feedback.tenant_id`。
+  后果不是"降级不干净"这么轻：库里会留下任何修订版本都没描述过的形状，再升级时 inspector
+  把残留当作"本来就存在"，于是**升级路径本身**也被掩盖。
+- 设计选择：`tests/test_concurrency.py` 用 8 个线程 + `threading.Barrier` 同时放行（顺序到达会把并发
+  测试悄悄退化成顺序测试），断言"恰好一个认领成功"、stale 抢占、`replace_chunks` 的读者**永远只看到
+  旧集合或新集合**、并行写者不丢行；同一批用例参数化为 `[sqlite]/[postgres]`，
+  `EVALRAG_TEST_DATABASE_URL` 未设置时 PG 分支 `skip`。`store.py` 的 sqlite 连接钩子补
+  `PRAGMA busy_timeout=5000`（否则多线程写立刻 `database is locked`）与文件库 `journal_mode=WAL`。
+  `tests/test_migrations.py` 对每个修订版本做一次真实往返：snapshot → upgrade → downgrade → 比
+  columns/indexes/unique constraints/foreign keys，并把差异打印成人话。
+- 替代方案与取舍：本地没有 PostgreSQL 也没有 docker daemon，所以 PG 只能进 CI（`postgres:16`
+  服务容器）；没有把并发测试做成"随机 sleep 碰运气"，因为那既不稳定也不证明竞争存在。
+  迁移测试每个修订版本都做一次真实 DDL 往返（约 20 次 upgrade/downgrade），比读文件做静态检查慢，
+  但只有真跑 `downgrade()` 才能发现上面四类缺陷。
+- 变异性验证（证明测试真的有牙）：在 `store.replace_chunks` 的 DELETE 之后临时插一句 `session.commit()`，
+  并发测试立刻失败并打印 `partial index observed: [0, 5, 7]`；把 `0005` 的 `drop_column` 去掉，
+  迁移测试立刻失败并指出 `feedback.columns left=['tenant_id'] lost=[] changed=[]`（两处改动均已还原）。
+- 新增文件/改动：`tests/test_concurrency.py`、`tests/test_migrations.py`、`app/core/store.py`（PRAGMA）、
+  `alembic/versions/0001_initial.py`、`0003_evaluation_datasets.py`、`0004_document_versions.py`、
+  `0005_feedback_tenant.py`、`.github/workflows/ci.yml`（新增 `postgres` job）、`.gitignore`（`-wal`/`-shm`）。
+- 验证命令及结果：本地 SQLite 下 6 passed / 6 skipped（PG 参数），迁移测试 1 passed / 1 skipped；
+  全套 **302 passed, 8 skipped**；`ruff check app tests alembic scripts` → All checks passed。
+- 仍存在的限制：PG 分支与 CI 的 `postgres` job 只能由 CI 真正执行（本地无 PG）；
+  `busy_timeout`/WAL 只对文件型 SQLite 生效；并发测试验证的是"恰好一个成功"，
+  不覆盖 worker 崩溃后重新入队的最坏时序（stale 抢占用回拨 `updated_at` 模拟）。
+
+### 事项三十二：类型检查、覆盖率门禁，以及一个没人读的 `uv.lock`
+
+- 根因：仓库既没有类型检查也没有覆盖率（`uv.lock` 637KB，但 CI 走 `pip install -e`，没有任何东西读它，
+  于是它可以静默漂移）。
+- 设计选择：`pyproject.toml` 里落 `[tool.mypy]`（`files=["app"]`、`check_untyped_defs`、
+  `warn_unused_ignores`、`warn_redundant_casts`、`no_implicit_optional`、`strict_equality`），
+  对没有 `py.typed` 的 `celery`/`sentence_transformers`/`pymilvus`/`openpyxl` 做 per-module override；
+  `[tool.coverage]` 只统计 `app`、`fail_under=80`；dev extras 增补 `mypy`、`pytest-cov`；
+  CI 的 backend job 增加 `mypy`、`pytest --cov=app --cov-fail-under=80`，并加
+  `astral-sh/setup-uv` + `uv lock --check` 防止 lock 与 `pyproject.toml` 漂移。
+- 顺手修掉的 28 个真实类型问题（都不是为过检查而改）：`app/core/ingestion.py` 里同一个名字
+  `document` 先后承载 `pymupdf.Document` 与 `docx.Document`，第二个分支因此在类型上"继承"了第一个
+  （`document.paragraphs` 不存在）——改名并拆开；pymupdf 的 `Document` 不走 `__iter__`（迭代靠
+  legacy `__getitem__`），`for page in document` 无法类型化——改为显式 `page_count` + 索引访问；
+  `app/core/cache.py`/`app/core/rate_limit.py` 把 `RedisError` 重新绑定成 `OSError`（给一个类型名赋类型）
+  ——改为 `try/except/else` 组装 `REDIS_FAILURES`（同时去掉重复的 `OSError`）；
+  `app/core/observability.py` 的 `run_type` 收窄为 LangSmith 的 Literal（打错一个 run type 现在会报错）；
+  `app/core/store.py` 的 `evidence_mode` 在 DB 边界用 `cast` 标注（列是 str，schema 是 Literal）；
+  `app/core/evaluation_runner.py` 的 `document_version` 形参原本声明 `str`，而它按语义就是 `str | None`
+  （缺省不过滤）；`answer_evaluation` 分支用 `assert` 收窄 `self.llm`；
+  `app/core/langsmith_eval.py` 的 `item.inputs` 可能是 `None`；`app/core/rag.py` 的
+  `stream_with_evidence` 改成 `AsyncGenerator[str, None]`——调用方确实在 `await ...aclose()`。
+- 替代方案与取舍：**没有**打开 `disallow_untyped_defs`（还剩 29 个未注解定义），因为"为了满足 linter
+  补 29 个注解"不是这次的目标，写进限制里比假装完成更诚实。覆盖率下限取 80 而不是贴着实测值：
+  本地用 stdlib `trace --count --missing` 量到 `app/` 行覆盖 **86.7%**（4378/5048，44 个模块全部被 import），
+  而 `coverage`/`pytest-cov` 在本地三个解释器里都装不上（离线）——所以门禁留了约 7pp 余量。
+- 验证命令及结果：本地 `mypy`（1.14.1）与 uv 临时环境里的**锁定版本 1.20.2** 都是
+  `Success: no issues found in 44 source files`；`uv lock --check` → exit 0（重新生成的 lock 增加了
+  `mypy`/`pytest-cov`/`openpyxl`/`mypy-extensions`/`pathspec`，并把 `pytest` 8.4.2 → 9.1.1）；
+  全套 **302 passed, 8 skipped**；`ruff` → All checks passed。
+- 仍存在的限制：CI 上的覆盖率百分比本地无法复现（没有 pytest-cov），只能保证下限有余量；
+  `mypy` 只覆盖 `app/`，`scripts/`、`tests/`、`alembic/` 仍未检查；`uv.lock` 现在只会被
+  **校验**而不会用于安装（安装仍走 pip 的版本区间），真正的 `uv sync --frozen` 属于下一梯队。
+
+### 事项三十三：一次评测既跑得慢、又怕卡死、失败还会把已完成的题全丢掉
+
+- 根因：`EvaluationRunner._run_examples` 是 `for example in dataset.examples` 顺序循环——75 题、
+  每题一次检索 + 两次 LLM 调用，串行就是分钟到小时级；没有超时，一个卡死的后端调用会拖住整轮；
+  失败路径 `update_evaluation(id, "failed", {"metrics": {}, "examples": []}, str(exc))` 把已经算完、
+  已经付过钱的逐题行整体覆盖掉，而 `app/tasks.py` 的 Celery 装饰器正是
+  `autoretry_for=(Exception,), max_retries=2` —— 重试用同一个 evaluation_id，于是每一次重试都从零开始重新付费。
+- 设计选择：① 有界并发 `EVALUATION_CONCURRENCY`（默认 4，`asyncio.Semaphore`，per-example；
+  付费重排另有 `TYPESAFE_CONCURRENCY`）；② 每题超时 `EVALUATION_EXAMPLE_TIMEOUT_SECONDS`
+  （默认 120s，`asyncio.wait_for`），超时的题写成 `{"metrics": {}, "retrieved": [], "timed_out": True,
+  "error": "timed out after ..."}`，因此自动不进任何均值，同时新增
+  `completed_example_count`/`timed_out_example_count` 说明几个数参与了平均；③ 逐题 checkpoint：
+  每完成一题（写锁内）就把 `ordered()` 写进 `results.examples` + `results.progress`，失败路径改成
+  **保留**上一次的 results，只更新 status 与 error_message；`run()` 入口按 fingerprint 取 checkpoint，
+  跳过已完成的题，`progress` 报 `completed/total/resumed`。
+- 三个不显眼但必要的细节：结果**按数据集顺序**折叠（不是完成顺序），否则 `scripts/bootstrap_ci.py`
+  的逐题配对会在两次运行之间错位；fingerprint 覆盖题集、检索设置与 rag/prompt 版本，
+  换了设置宁可整轮重跑也不混行；`asyncio.gather` 失败时逐个 `task.cancel()` 再等它们结束，
+  否则一个迟到的 checkpoint 写入会把刚写下的 `failed` 覆盖回 `running`。
+- 替代方案与取舍：没有引入 `anyio`/`asyncio.TaskGroup`（项目已有 FastAPI + asyncio，`Semaphore` +
+  `gather` 足够，也避免为了取消语义再加依赖）；没有把 checkpoint 逐题写进数据库的独立表
+  （复用 `evaluations.results_json`，代价是每次写入都是整份 JSON，但 75 题的量级无所谓，
+  换来的是 `GET /evaluations/{id}` 天然能看到进度）；超时的题**不计 0 分**而是完全排除——把"没测到"
+  当成"测得很差"会静默压低所有指标。
+- 验证命令及结果：新增 `tests/test_evaluation_runner_concurrency.py` 5 项（并发上限=3 且行按数据集
+  顺序、超时题被排除且计数正确、失败后重跑只补跑缺的题并 `resumed=3`、换 `rag_version` 后
+  checkpoint 被丢弃 `resumed=0`、checkpoint 写入失败不影响整轮）→ 5 passed；**5 个变异体全部被抓**：
+  去掉 Semaphore（并发数变成 6）、去掉 timeout（慢题 5s 后正常完成、计数为 0）、失败路径改回
+  空 results（重跑重新问了全部 4 题）、checkpoint 忽略 fingerprint（`resumed=2`）、
+  把 checkpoint 的 `except Exception` 换成 `except ZeroDivisionError`（整轮 failed）——每个变异只让
+  对应的那一个用例失败，其余不动。全套 **307 passed, 8 skipped**；`ruff` → All checks passed；
+  `mypy` → Success（44 files）。
+- 仍存在的限制：并发是进程内的，多 Celery worker 同时跑同一个 evaluation_id 仍会各跑一遍
+  （claim 是 per-document 的，评测行没有租约）；超时按"每题"计，不含排队等待时间（有界并发下排队
+  可能比 120s 长，但那时也意味着 4 个好题在跑，不是卡死）；checkpoint 写的是整份 JSON，
+  题量上到几千题时应改成增量表。
+
+### 事项三十四：答案质量评测从来没开过，而裁判是同一个模型——那就自己审自己
+
+- 根因：`scripts/run_golden_experiment.py:387` 把 `answer_evaluation` 硬编码为 `False`，
+  于是"检索到了没有"有 7 个指标、`docs/evaluation/*.json` 有 11 个产物，而"答得对不对、有没有
+  依据"一行数据都没有。`app/core/answer_evaluation.py` 的裁判与答题用的是同一个 provider、
+  同一个模型（`create_llm(settings)`），三个维度（correctness/faithfulness/completeness）
+  写进平均数就再没人看过——管线看不出"裁判只是在附和"。
+- 顺带修掉一个真缺陷：LLM 适配器对瞬时网络错误**零重试**。两次真跑 `--answer-evaluation` 时
+  `app/core/rag.py:42 answer_with_evidence` → `app/core/llm.py:64` 抛
+  `httpx.ConnectError: All connection attempts failed`，整轮 evaluation 直接 failed。
+  隔离探针（单次/并发 4 路/连续 30 次各自新建 client）都成功，说明是不可复现的瞬时抖动，
+  但"一次瞬断废掉一轮付费评测"是确凿观察。修法：`LLM_MAX_ATTEMPTS = 3`、
+  `LLM_BACKOFF_SECONDS = 0.5`、`RETRYABLE_STATUS_CODES = {408,409,425,429,500,502,503,504}`、
+  `LLMRequestError`，`answer()` 循环重试并抽出不带重试逻辑的 `_post_chat`，
+  退避优先用 `Retry-After`（解析失败则指数退避，上限 30s）。
+- 设计选择：① 给评测再加一个开关 `--answer-evaluation`（默认关，保住"没配 key 也能跑检索实验"）；
+  ② 产物沿用 `configs[].per_example[]` 形状，逐行写 `judge{correctness,faithfulness,completeness,
+  reason}` 与**裁判看过的 ≤3 块证据**（每块 ≤400 字）——忠实度不看到证据就没法人工复核；
+  ③ `scripts/judge_agreement.py` 把人工标签与 judge 逐行配对（键是 `(config, question)`，
+  同一键出现两行直接报错，因为 golden 集历史上真出现过重复题），算 Cohen's kappa
+  + 2000 次 percentile bootstrap（固定 seed `20261005`），并把 judge 值缺失/人工值缺失分别计数，
+  绝不当 0 分；双方把所有行都判成同一类时明确写 "undefined"，而不是编一个数出来；
+  ④ `scripts/judge_calibration.py` 做扰动校准——把答案正确的行追加一句语料里根本不存在的
+  "规则"，再把同一批证据交给同一个裁判：只会算平均分的管线看不出裁判是不是在附和，
+  植入一个已知的谎言就能看出来。
+- 数据与结果（真实 `deepseek-chat`，语料用**已入库**的 `tests/fixtures/eval_gate/corpus` 8 篇 +
+  `golden.json` 16 题（含 1 道应拒答题），2 个检索配置 × 16 题 = 32 行 ≥ 30）：
+  - `docs/evaluation/answer-quality-eval-gate-2026-10-05.json`：两配置检索指标相同
+    （R@1=0.600、R@3=0.867、MRR=0.700、nDCG@3=0.742、page_hit=0.867、quote_hit=0.867），
+    p50 约 3.4–3.7s/题（含生成 + 裁判两次调用）。
+  - 人工复核（`judge-agreement-2026-10-05.json`）：correctness kappa **1.000**
+    [1.000, 1.000]、completeness **1.000**、faithfulness **0.000**（agreement 0.875）。
+    32 行里裁判的三个维度只有两种取值——28 行 (1,1,1)、4 行 (0,0,0)，**从未分离**。
+  - 那 4 个 0 分是"证据里确实没有该条款，模型于是拒答"：500 元首次出资额那题召回的 3 块证据
+    来自 05/01/02 三份文件，而规则在 `07_成员资格与出资规定.md:5`（检索没召回）；
+    "借款期限最长"那题检索返回 **0 块证据**。人工把这两个拒答记为 **faithful = 1.0**
+    （证据不足时拒答是唯一忠实的回答），于是 faithfulness 上 kappa 掉到 0：
+    **裁判把"没答对"当成了"不忠实"。**
+  - 扰动校准（`judge-calibration-2026-10-05.json`，三次独立运行）：`fabrications_flagged`
+    = **0/16、0/16、0/16**；faithfulness 仍给满分的 11/16，给 0.5 的 3/16，剩下 2 行 0 分
+    是拒答题被判错（与植入无关）。裁判的 reason 里明明写着"额外补充了证据中不存在的第三十三条
+    内容"，却仍然给 0.5/1.0，理由是"虽未在证据中出现，但**不影响对核心问题的忠实度，且未与证据
+    冲突**"——它把"无依据"降级成了"只要不矛盾就不算不忠实"。
+- 替代方案与取舍：没有改裁判的 prompt（改了就无法与本次产物对照，先量出现状再动手）；没有引入
+  RAGAS/DeepEval 之类的评测框架（要的是一次可复核的裁判审计，不是又一个依赖）；没有让第二个模型
+  当第二裁判（多裁判投票/更强模型留给下一梯队）；标签者不是领域专家、且标注时看到了裁判的分数，
+  所以 correctness/completeness 的 1.000 有一部分是循环论证——报告里全部写明，宁可报一个
+  "上界"也不假装是无偏的标注者间一致性。
+- 验证命令及结果：
+  `python -m scripts.run_golden_experiment --corpus tests/fixtures/eval_gate/corpus --golden
+  tests/fixtures/eval_gate/golden.json --configs sparse-bm25,sparse-bm25-rerank
+  --answer-evaluation --json docs/evaluation/answer-quality-eval-gate-2026-10-05.json` → exit 0；
+  `python -m scripts.judge_agreement --artifact ... --labels ... --json ...` → 三行指标 + 混淆矩阵；
+  `python -m scripts.judge_calibration --artifact ... --json ...` → `fabrications_flagged: 0`。
+  新增 `tests/test_judge_calibration.py`（10 项：植入句被追加且原答案不变、应拒答/无证据/无标准答案
+  的行被排除、同一 seed 抽样与轮转可复现、送给裁判的 payload 里 `system_answer` 含植入句且证据
+  page 是 int、汇总计数区分"部分扣分"与"真被判不忠实"、产物能被 `judge_agreement.load_rows` 读回、
+  同一问题在两个源配置下仍是两行、空样本 main 返回 1）与 `tests/test_judge_agreement.py`（11 项，
+  含手算表、双方同类 → kappa undefined、重复键报错、阈值改变结论）；`tests/test_llm.py` 新增 4 项
+  （前两次 `httpx.ConnectError` 后成功、三次都失败 → `LLMRequestError` 且 `__cause__` 保留、
+  429 的 `Retry-After: 2` 被采纳、400 不重试）。
+- 仍存在的限制：16 题、1 个语料（8 篇小文件）、1 个模型、校准只做了一次采样（16 行，虽然跑了 3 遍）；
+  更难的未入库语料 `law/`（18 份文档 + 75 题 v2）本地可跑但没有产物提交，因为它对别人不可复现；
+  kappa 的 bootstrap 区间在最优点退化（`[1.000, 1.000]`）；judge 的 `faithfulness` 在阈值上
+  很脆（0.5 既不算高也不算低），所以校准报告把 `fabrications_flagged`（correctness 保留
+  且 faithfulness < 0.5）单独列出来，而不用"多少行低于 0.5"这种会被无关扣分污染的指标。
+
+## 已完成事项复盘（2026-10-05：前端拆分、SSE 分帧与密钥存储）
+
+### 事项三十五：880 行的单文件前端、不认 CRLF 的流解析器，和一个长期留在 localStorage 的 API Key
+
+- 根因：`frontend/src/App.vue` 拆前 880 行（`<script setup>` 434 行 + 模板 444 行），一个文件里装了
+  登录页、两个视图和 8 个面板；真正有逻辑的两处——`app/api.ts` 里的 SSE 分帧解析和指标
+  标签/格式化——内联在请求循环与模板表达式里，因此浏览器端**一项测试都没有**：Python 侧 332 项
+  测试不可能发现前端回归。另外三处是读代码就能确证的真缺陷：
+  ① `api.ts:requestHeaders()` 用 `localStorage.getItem('evalrag_api_key')`，`App.vue:login()`
+  也把 key 写进 localStorage——API Key 长期留在磁盘上，任何 XSS 或共用这台机器的人都能读回；
+  ② `streamChat()` 的旧解析器完全忽略 `event: error` 帧（后端在引用不可核验、生成失败时用它收尾），
+  于是"被拒答"在界面上表现为一片空白，用户看不到任何原因；
+  ③ 旧解析器用 `buffer.split('\n\n')` 只认 LF 终止符，而 SSE 规范允许 CRLF——CRLF 帧一个都解析不出来，
+  多行 `data:` 也没有按规范用换行拼接。
+- 设计选择：① 拆分**只搬模板**，状态与函数全部留在 App.vue（零数据流重构，行为逐字不变），
+  子组件用 `defineModel` + props/emits 接模板，共 8 个组件；② 把三块有真实逻辑的代码抽成可测模块：
+  `src/sse.ts`（`parseSseBlock` / `SseDecoder`，帧边界按"更早出现的 `\n\n` 或 `\r\n\r\n`"取，
+  半个帧留在 `pending`）、`src/auth.ts`（`loadApiKey/getApiKey/setApiKey/clearApiKey` + tenant 读写）、
+  `src/metrics.ts`（指标标签 + 整数/毫秒/三位小数格式）；③ 密钥默认**只在内存**（本次会话有效），
+  勾选「在本标签页内记住密钥」才写 sessionStorage，关掉标签页即失效；**legacy localStorage key
+  一律删除而不是迁移**——迁移等于继续保留长期凭据，等于这次修改白做；④ `event: error` 接到
+  `handlers.onError`，由 App 既有的 `setError` 显示出来；⑤ vitest 独立 `vitest.config.ts`
+  （vite 自己的 `defineConfig` 不接受 `test` 字段，硬塞会让 `npm run build` 类型报错），
+  `pool: 'threads'` 而不是默认的 fork 池。
+- 替代方案与取舍：没有引入 Pinia——组件只是模板切分，没有跨组件共享状态，为拆文件引入状态库是
+  本末倒置；没有把 API Key 换成 httpOnly cookie / 服务端会话（要动后端鉴权链路，属于下一梯队，
+  现状写在下面的"仍存在的限制"与 README 里）；没有顺手把轮询循环抽成 composable
+  （重构面扩大、收益不明确）；"记住密钥"选 sessionStorage 而不是持久化，是因为这个前端没有真正的
+  会话概念，持久化等于把原来的问题换个键名继续存在。
+- 新增测试（`frontend/src/`，32 项）：`auth.test.ts`（9 项，含"legacy key 被删除且**不被采用**"、
+  "remember=false 时 localStorage/sessionStorage 都不写"、"storage 抛错（隐私模式）时不崩"）、
+  `sse.test.ts`（10 项，含跨 chunk 的半个帧、CRLF 终止符跨 chunk、`: ping` 心跳不产生事件、
+  多行 data 拼接、`[DONE]` 原样透传）、`metrics.test.ts`（4 项，含非数值指标被过滤、三种格式）、
+  `components/ChatPanel.test.ts`（6 项，含无知识库时按钮禁用、三类反馈只发一次、引用页码/版本/分数渲染）、
+  `components/DocumentPanel.test.ts`（3 项，含选中文件后 input 被清空以便重选同一文件）。
+- 验证命令及结果：`cd frontend && npm test` → **5 files / 32 passed**（vitest 5.0.3，1.08s）；
+  `npm run build` 的类型检查部分 `vue-tsc --noEmit` → exit 0。CI 的 `frontend` job 增加 `npm test`
+  一步（原来只有 `npm ci` + `npm run build`），并在 job 注释里写明为什么。
+  沙箱注记：本机 vitest/vite 需要 esbuild 的服务子进程，默认文件沙箱禁止管道子进程
+  （`spawn EPERM`，与之前 `vite build` 无法完成的限制同源），所以本地这次验证是在放宽权限后跑通的；
+  CI 的 ubuntu-latest 没有这个限制。
+- 仍存在的限制：API Key 仍由前端持有、后端只按 `X-API-Key` 比对，真正的修法是服务端会话或短期令牌；
+  `ask()` 的 `onError` 路径没有集成测试（只有类型检查 + 模板 props 传递，App 级 mount 测试留给下一梯队）；
+  `vite build` 在本沙箱仍无法完成，产物构建只在 CI 上验证；前端目前只有 `vue-tsc` 一道静态检查，
+  没有 ESLint/Prettier；组件测试只覆盖 ChatPanel 与 DocumentPanel 两个面板。
+
 ## P1：可靠性与安全
 
-- [ ] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 端到端验证发现）
+- [x] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 发现，2026-10-04 完成，见事项二十六）
   - 现象：带显式版本上传的文档，在默认查询参数下检索不到任何引用。
   - 复现：上传 `version=v9` 的文档并等待 `ready`（`chunks=1`），随后以默认参数调用 `/api/v1/retrieval/search`（`document_version` 缺省为 `latest`），`citations` 为 0，`answer` 为拒答文本。
   - 根因：`app/schemas.py` 将 `document_version` 默认值设为字面量 `"latest"`，`app/core/store.py::get_chunks` 将其作为等值条件（`ChunkRecord.version == "latest"`）；因此 `"latest"` 只是“未指定版本上传时的标签”，并非“最新版本”。前端 `frontend/src/App.vue` 在检索版本输入为空时也会回填 `'latest'`，与同页面显示逻辑（空值表示“全部”）不一致。
