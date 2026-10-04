@@ -32,8 +32,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    inspector = sa.inspect(op.get_bind())
     indexes = {
-        index["name"] for index in sa.inspect(op.get_bind()).get_indexes("feedback")
+        index["name"] for index in inspector.get_indexes("feedback")
     }
     if "ix_feedback_tenant_id" in indexes:
         op.drop_index("ix_feedback_tenant_id", table_name="feedback")
+    # The column is introduced here too, so dropping only the index would leave 0004's
+    # schema plus an unasked-for column.
+    columns = {column["name"] for column in inspector.get_columns("feedback")}
+    if "tenant_id" in columns:
+        op.drop_column("feedback", "tenant_id")

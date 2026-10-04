@@ -113,3 +113,29 @@ def downgrade() -> None:
         op.drop_table("evaluation_examples")
     if inspector.has_table("evaluation_datasets"):
         op.drop_table("evaluation_datasets")
+
+    # The columns and indexes this revision added to `evaluations` are part of the same
+    # change, so they have to go as well: otherwise a downgrade leaves `evaluations` in a
+    # state 0002 never had, and the next upgrade finds a half-upgraded table.
+    if not inspector.has_table("evaluations"):
+        return
+    indexes = {index["name"] for index in inspector.get_indexes("evaluations")}
+    for name in (
+        "ix_evaluations_tenant_id",
+        "ix_evaluations_knowledge_base_id",
+        "ix_evaluations_dataset_id",
+    ):
+        if name in indexes:
+            op.drop_index(name, table_name="evaluations")
+    columns = {column["name"] for column in inspector.get_columns("evaluations")}
+    for name in (
+        "tenant_id",
+        "knowledge_base_id",
+        "dataset_id",
+        "experiment_name",
+        "baseline_evaluation_id",
+        "parameters_json",
+        "completed_at",
+    ):
+        if name in columns:
+            op.drop_column("evaluations", name)

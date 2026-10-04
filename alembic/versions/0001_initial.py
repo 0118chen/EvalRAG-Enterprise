@@ -33,6 +33,22 @@ def upgrade():
         op.create_index("ix_feedback_trace_id", "feedback", ["trace_id"])
 
 def downgrade():
-    op.drop_table("documents")
-    op.drop_index("ix_knowledge_bases_tenant_id", table_name="knowledge_bases")
-    op.drop_table("knowledge_bases")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if inspector.has_table("documents"):
+        op.drop_table("documents")
+    if inspector.has_table("knowledge_bases"):
+        indexes = {index["name"] for index in inspector.get_indexes("knowledge_bases")}
+        if "ix_knowledge_bases_tenant_id" in indexes:
+            op.drop_index("ix_knowledge_bases_tenant_id", table_name="knowledge_bases")
+        op.drop_table("knowledge_bases")
+    # This revision also creates `feedback` and `evaluations`; a downgrade that leaves
+    # them behind does not restore the pre-0001 schema, and the next upgrade then treats
+    # them as tables that were already there.
+    if sa.inspect(bind).has_table("feedback"):
+        indexes = {index["name"] for index in sa.inspect(bind).get_indexes("feedback")}
+        if "ix_feedback_trace_id" in indexes:
+            op.drop_index("ix_feedback_trace_id", table_name="feedback")
+        op.drop_table("feedback")
+    if sa.inspect(bind).has_table("evaluations"):
+        op.drop_table("evaluations")
