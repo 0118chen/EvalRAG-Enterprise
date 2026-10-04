@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   api,
   type Citation,
@@ -10,19 +10,23 @@ import {
   type RetrievalDiagnostics,
   type SearchPayload,
 } from './api'
+import { clearApiKey, clearTenantId, loadApiKey, loadTenantId, saveTenantId, setApiKey } from './auth'
+import ChatPanel from './components/ChatPanel.vue'
+import DocumentPanel from './components/DocumentPanel.vue'
+import EvaluationDatasetPanel from './components/EvaluationDatasetPanel.vue'
+import EvaluationEditor from './components/EvaluationEditor.vue'
+import EvaluationExperimentPanel from './components/EvaluationExperimentPanel.vue'
+import EvaluationHistoryPanel from './components/EvaluationHistoryPanel.vue'
+import EvaluationResultsPanel from './components/EvaluationResultsPanel.vue'
+import KnowledgePanel from './components/KnowledgePanel.vue'
+import { emptyExampleDraft, type ExampleDraft } from './types'
 
 type View = 'workspace' | 'evaluation'
-type ExampleDraft = {
-  question: string
-  expected_answer: string
-  expected_document_id: string
-  expected_page?: number
-  category: string
-}
 
 const activeView = ref<View>('workspace')
-const tenantId = ref(localStorage.getItem('evalrag_tenant') || '')
-const apiKey = ref(localStorage.getItem('evalrag_api_key') || '')
+const tenantId = ref(loadTenantId())
+const apiKey = ref(loadApiKey())
+const rememberApiKey = ref(false)
 const loginName = ref(tenantId.value || 'demo-enterprise')
 const busy = ref(false)
 const loading = ref(false)
@@ -46,7 +50,7 @@ const feedbackComment = ref('')
 
 const retrievalMode = ref<SearchPayload['retrieval_mode']>('hybrid')
 const topK = ref(5)
-const queryVersion = ref('latest')
+const queryVersion = ref('')
 const rerank = ref(true)
 const queryRewrite = ref(true)
 const answerEvaluation = ref(false)
@@ -55,15 +59,7 @@ const datasets = ref<EvaluationDataset[]>([])
 const selectedDataset = ref('')
 const datasetName = ref('')
 const datasetDescription = ref('')
-const exampleDrafts = ref<ExampleDraft[]>([
-  {
-    question: '',
-    expected_answer: '',
-    expected_document_id: '',
-    expected_page: undefined,
-    category: 'general',
-  },
-])
+const exampleDrafts = ref<ExampleDraft[]>([emptyExampleDraft()])
 const evaluations = ref<EvaluationJob[]>([])
 const selectedEvaluation = ref<EvaluationJob | null>(null)
 const baselineEvaluationId = ref('')
@@ -90,17 +86,18 @@ function setNotice(value: string) {
 
 function logout() {
   tenantId.value = ''
-  localStorage.removeItem('evalrag_tenant')
-  localStorage.removeItem('evalrag_api_key')
+  clearTenantId()
+  clearApiKey()
+  apiKey.value = ''
 }
 
 async function login() {
   const tenant = loginName.value.trim()
   if (!tenant) return
   tenantId.value = tenant
-  localStorage.setItem('evalrag_tenant', tenant)
-  if (apiKey.value.trim()) localStorage.setItem('evalrag_api_key', apiKey.value.trim())
-  else localStorage.removeItem('evalrag_api_key')
+  saveTenantId(tenant)
+  setApiKey(apiKey.value, { remember: rememberApiKey.value })
+  apiKey.value = loadApiKey()
   await loadAll()
 }
 
@@ -125,7 +122,7 @@ async function loadKnowledgeBases() {
 
 async function selectKnowledgeBase(id: string) {
   selectedKb.value = id
-  queryVersion.value = 'latest'
+  queryVersion.value = ''
   await loadDocuments()
 }
 
@@ -156,11 +153,8 @@ async function createKnowledgeBase() {
   }
 }
 
-async function uploadDocument(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !selectedKb.value) return
+async function uploadDocument(file: File) {
+  if (!selectedKb.value) return
   busy.value = true
   try {
     const document = await api.upload(
@@ -207,7 +201,7 @@ function searchPayload(): SearchPayload {
     question: question.value.trim(),
     top_k: topK.value,
     retrieval_mode: retrievalMode.value,
-    document_version: queryVersion.value.trim() || 'latest',
+    document_version: queryVersion.value.trim() || null,
     rerank: rerank.value,
     query_rewrite: queryRewrite.value,
   }
@@ -241,6 +235,9 @@ async function ask() {
       onTrace: (value) => {
         traceId.value = value
       },
+      onError: (message) => {
+        setError(message)
+      },
     })
   } catch (reason) {
     setError(reason)
@@ -266,13 +263,7 @@ async function sendFeedback(value: string) {
 }
 
 function addExample() {
-  exampleDrafts.value.push({
-    question: '',
-    expected_answer: '',
-    expected_document_id: '',
-    expected_page: undefined,
-    category: 'general',
-  })
+  exampleDrafts.value.push(emptyExampleDraft())
 }
 
 function removeExample(index: number) {
@@ -310,15 +301,7 @@ async function createDataset() {
     selectedDataset.value = dataset.name
     datasetName.value = ''
     datasetDescription.value = ''
-    exampleDrafts.value = [
-      {
-        question: '',
-        expected_answer: '',
-        expected_document_id: '',
-        expected_page: undefined,
-        category: 'general',
-      },
-    ]
+    exampleDrafts.value = [emptyExampleDraft()]
     await loadDatasets()
     setNotice('评测数据集已创建')
   } catch (reason) {
@@ -351,7 +334,7 @@ async function runEvaluation() {
       dataset_name: dataset.name,
       retrieval_mode: retrievalMode.value,
       top_k: topK.value,
-      document_version: queryVersion.value.trim() || 'latest',
+      document_version: queryVersion.value.trim() || null,
       rerank: rerank.value,
       query_rewrite: queryRewrite.value,
       answer_evaluation: answerEvaluation.value,
@@ -398,36 +381,6 @@ async function loadComparison(id: string) {
   comparison.value = (result.delta || {}) as Record<string, number>
 }
 
-function metricEntries(job: EvaluationJob | null): Array<[string, number]> {
-  const metrics = job?.results?.metrics || {}
-  return Object.entries(metrics).filter(([, value]) => typeof value === 'number')
-}
-
-function metricLabel(key: string): string {
-  const labels: Record<string, string> = {
-    recall_at_3: 'Recall@3',
-    recall_at_5: 'Recall@5',
-    precision_at_3: 'Precision@3',
-    precision_at_5: 'Precision@5',
-    ndcg_at_3: 'nDCG@3',
-    ndcg_at_5: 'nDCG@5',
-    mrr: 'MRR',
-    page_hit: '页码命中',
-    answer_correctness: '答案正确性',
-    answer_faithfulness: '答案忠实度',
-    answer_completeness: '答案完整性',
-    latency_ms: '平均耗时(ms)',
-    example_count: '样例数',
-  }
-  return labels[key] || key
-}
-
-function formatMetric(key: string, value: number): string {
-  if (key === 'latency_ms') return value.toFixed(1)
-  if (key === 'example_count') return String(Math.round(value))
-  return value.toFixed(3)
-}
-
 onMounted(() => {
   if (loggedIn.value) loadAll()
 })
@@ -446,6 +399,10 @@ onMounted(() => {
       <label>
         <span>API Key</span>
         <input v-model="apiKey" type="password" placeholder="生产环境必填" @keyup.enter="login" />
+      </label>
+      <label class="toggle">
+        <input v-model="rememberApiKey" type="checkbox" />
+        在本标签页内记住密钥
       </label>
       <p v-if="error" class="alert error">{{ error }}</p>
       <button class="primary wide" @click="login">进入工作台</button>
@@ -476,405 +433,85 @@ onMounted(() => {
     <p v-if="notice" class="alert success">{{ notice }}</p>
 
     <section v-if="activeView === 'workspace'" class="workspace-layout">
-      <aside class="panel knowledge-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">知识范围</p>
-            <h2>知识库</h2>
-          </div>
-          <span class="count">{{ knowledgeBases.length }}</span>
-        </div>
-        <div class="form-stack">
-          <input v-model="kbName" placeholder="知识库名称" />
-          <textarea v-model="kbDescription" class="compact" placeholder="用途或数据范围说明" />
-          <button class="primary" :disabled="busy" @click="createKnowledgeBase">创建知识库</button>
-        </div>
-        <div class="list-divider" />
-        <button
-          v-for="knowledgeBase in knowledgeBases"
-          :key="knowledgeBase.id"
-          class="list-item"
-          :class="{ active: selectedKb === knowledgeBase.id }"
-          @click="selectKnowledgeBase(knowledgeBase.id)"
-        >
-          <span>{{ knowledgeBase.name }}</span>
-          <small>{{ knowledgeBase.description || '暂无说明' }}</small>
-        </button>
-        <p v-if="!knowledgeBases.length" class="empty">尚未创建知识库</p>
-      </aside>
+      <KnowledgePanel
+        v-model:name="kbName"
+        v-model:description="kbDescription"
+        :knowledge-bases="knowledgeBases"
+        :selected-kb="selectedKb"
+        :busy="busy"
+        @create="createKnowledgeBase"
+        @select="selectKnowledgeBase"
+      />
 
-      <section class="panel document-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">数据资产</p>
-            <h2>{{ activeKnowledgeBase?.name || '文档' }}</h2>
-          </div>
-          <div class="inline-controls">
-            <input v-model="uploadVersion" class="version-input" placeholder="文档版本" />
-            <label class="button upload-button" :class="{ disabled: busy || !selectedKb }">
-              {{ busy ? '处理中' : '上传文档' }}
-              <input
-                type="file"
-                accept=".pdf,.docx,.html,.htm,.xlsx,.txt,.md"
-                :disabled="busy || !selectedKb"
-                @change="uploadDocument"
-              />
-            </label>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>文档</th>
-                <th>版本</th>
-                <th>状态</th>
-                <th>分块</th>
-                <th>进度</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="document in documents" :key="document.id">
-                <td>
-                  <strong>{{ document.filename }}</strong>
-                  <small v-if="document.error_message" class="danger-text">
-                    {{ document.error_message }}
-                  </small>
-                </td>
-                <td><span class="tag">{{ document.version }}</span></td>
-                <td><span class="status" :class="document.status">{{ document.status }}</span></td>
-                <td>{{ document.chunks }}</td>
-                <td>
-                  <progress :value="document.progress" max="100" />
-                </td>
-                <td class="row-actions">
-                  <button class="danger-link" @click="removeDocument(document)">删除</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p v-if="!documents.length" class="empty">当前知识库暂无文档</p>
-      </section>
+      <DocumentPanel
+        v-model:version="uploadVersion"
+        :documents="documents"
+        :knowledge-base-name="activeKnowledgeBase?.name || ''"
+        :selected-kb="selectedKb"
+        :busy="busy"
+        @upload="uploadDocument"
+        @remove="removeDocument"
+      />
 
-      <section class="panel chat-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">可追溯问答</p>
-            <h2>检索对话</h2>
-          </div>
-          <div class="retrieval-controls">
-            <select v-model="retrievalMode">
-              <option value="hybrid">混合检索</option>
-              <option value="dense">Dense</option>
-              <option value="sparse">Sparse</option>
-            </select>
-            <input v-model.number="topK" type="number" min="1" max="20" aria-label="Top K" />
-            <input v-model="queryVersion" class="version-input" placeholder="检索版本" />
-            <label class="toggle">
-              <input v-model="rerank" type="checkbox" />
-              Rerank
-            </label>
-            <label class="toggle">
-              <input v-model="queryRewrite" type="checkbox" />
-              Query Rewrite
-            </label>
-          </div>
-        </div>
-        <div class="composer">
-          <textarea
-            v-model="question"
-            placeholder="输入问题，按 Ctrl+Enter 发起检索"
-            @keydown.ctrl.enter="ask"
-          />
-          <button class="primary ask-button" :disabled="busy || !selectedKb" @click="ask">
-            {{ busy ? '处理中' : '提问' }}
-          </button>
-        </div>
-
-        <article v-if="answer || citations.length" class="answer-region">
-          <div class="answer-heading">
-            <div>
-              <p class="section-kicker">回答</p>
-              <h3>基于证据生成</h3>
-            </div>
-            <span v-if="traceId" class="trace-badge">Trace {{ traceId.slice(0, 12) }}</span>
-          </div>
-          <p class="answer-text">{{ answer }}</p>
-
-          <div v-if="retrieval" class="diagnostics">
-            <span>候选 {{ retrieval.candidate_count }}</span>
-            <span>{{ retrieval.cache_hit ? '缓存命中' : '实时检索' }}</span>
-            <span>{{ retrieval.reranked ? '已重排' : '未重排' }}</span>
-            <span>版本 {{ retrieval.document_version || '全部' }}</span>
-            <span v-if="retrieval.rewritten_queries.length">
-              Query {{ retrieval.rewritten_queries.length }} 路
-            </span>
-          </div>
-
-          <section v-if="citations.length" class="citation-list">
-            <h3>引用来源</h3>
-            <details v-for="(source, index) in citations" :key="`${source.document_id}-${source.page}-${index}`">
-              <summary>
-                <span>{{ source.document_id }} · 第 {{ source.page }} 页</span>
-                <span class="tag">{{ source.version }}</span>
-                <span class="score">{{ source.score?.toFixed(4) ?? 'n/a' }}</span>
-              </summary>
-              <p>{{ source.text }}</p>
-            </details>
-          </section>
-
-          <section class="feedback-row">
-            <template v-if="!feedbackSent">
-              <input v-model="feedbackComment" placeholder="可选反馈说明" />
-              <button @click="sendFeedback('correct')">回答正确</button>
-              <button @click="sendFeedback('citation_error')">引用有误</button>
-              <button @click="sendFeedback('incorrect')">回答错误</button>
-            </template>
-            <p v-else class="success-text">反馈已记录</p>
-          </section>
-        </article>
-      </section>
+      <ChatPanel
+        v-model:question="question"
+        v-model:retrieval-mode="retrievalMode"
+        v-model:top-k="topK"
+        v-model:query-version="queryVersion"
+        v-model:rerank="rerank"
+        v-model:query-rewrite="queryRewrite"
+        v-model:feedback-comment="feedbackComment"
+        :busy="busy"
+        :selected-kb="selectedKb"
+        :answer="answer"
+        :citations="citations"
+        :retrieval="retrieval"
+        :trace-id="traceId"
+        :feedback-sent="feedbackSent"
+        @ask="ask"
+        @feedback="sendFeedback"
+      />
     </section>
 
     <section v-else class="evaluation-layout">
-      <aside class="panel dataset-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">黄金样例</p>
-            <h2>评测数据集</h2>
-          </div>
-          <span class="count">{{ datasets.length }}</span>
-        </div>
-        <button
-          v-for="dataset in datasets"
-          :key="dataset.id"
-          class="list-item"
-          :class="{ active: selectedDataset === dataset.name }"
-          @click="selectedDataset = dataset.name"
-        >
-          <span>{{ dataset.name }}</span>
-          <small>{{ dataset.examples.length }} 条样例 · {{ dataset.knowledge_base_id }}</small>
-        </button>
-        <p v-if="!datasets.length" class="empty">尚未创建评测数据集</p>
-      </aside>
+      <EvaluationDatasetPanel v-model:selected-dataset="selectedDataset" :datasets="datasets" />
 
-      <section class="panel dataset-editor">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">数据准备</p>
-            <h2>新建数据集</h2>
-          </div>
-          <button class="secondary" @click="addExample">添加样例</button>
-        </div>
-        <div class="dataset-meta">
-          <input v-model="datasetName" placeholder="数据集名称" />
-          <input v-model="datasetDescription" placeholder="评测目标说明" />
-        </div>
-        <div class="example-editor">
-          <div v-for="(example, index) in exampleDrafts" :key="index" class="example-row">
-            <span class="row-number">{{ index + 1 }}</span>
-            <input v-model="example.question" placeholder="问题" />
-            <select v-model="example.expected_document_id">
-              <option value="">目标文档</option>
-              <option v-for="document in documents" :key="document.id" :value="document.id">
-                {{ document.filename }}
-              </option>
-            </select>
-            <input
-              v-model.number="example.expected_page"
-              type="number"
-              min="1"
-              placeholder="页码"
-            />
-            <input v-model="example.category" placeholder="类别" />
-            <button class="danger-link" @click="removeExample(index)">移除</button>
-            <textarea
-              v-model="example.expected_answer"
-              class="expected-answer"
-              placeholder="标准答案（可选，用于答案级评测）"
-            />
-          </div>
-        </div>
-        <div class="editor-actions">
-          <span class="muted">使用目标文档和页码计算 Recall、Precision、MRR、nDCG 与页码命中率。</span>
-          <button class="primary" :disabled="busy || !selectedKb" @click="createDataset">
-            保存数据集
-          </button>
-        </div>
-      </section>
+      <EvaluationEditor
+        v-model:dataset-name="datasetName"
+        v-model:dataset-description="datasetDescription"
+        v-model:example-drafts="exampleDrafts"
+        :documents="documents"
+        :busy="busy"
+        :selected-kb="selectedKb"
+        @add-example="addExample"
+        @remove-example="removeExample"
+        @save="createDataset"
+      />
 
-      <section class="panel experiment-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">实验配置</p>
-            <h2>运行检索评测</h2>
-          </div>
-        </div>
-        <div class="experiment-form">
-          <label>
-            <span>数据集</span>
-            <select v-model="selectedDataset">
-              <option value="">请选择</option>
-              <option v-for="dataset in datasets" :key="dataset.id" :value="dataset.name">
-                {{ dataset.name }}
-              </option>
-            </select>
-          </label>
-          <label>
-            <span>检索模式</span>
-            <select v-model="retrievalMode">
-              <option value="hybrid">混合检索</option>
-              <option value="dense">Dense</option>
-              <option value="sparse">Sparse</option>
-            </select>
-          </label>
-          <label>
-            <span>文档版本</span>
-            <input v-model="queryVersion" placeholder="latest" />
-          </label>
-          <label>
-            <span>Top K</span>
-            <input v-model.number="topK" type="number" min="1" max="20" />
-          </label>
-          <label>
-            <span>基线实验</span>
-            <select v-model="baselineEvaluationId">
-              <option value="">不比较</option>
-              <option
-                v-for="evaluation in completedEvaluations"
-                :key="evaluation.id"
-                :value="evaluation.id"
-              >
-                {{ evaluation.dataset_name }} · {{ evaluation.id.slice(0, 8) }}
-              </option>
-            </select>
-          </label>
-          <label>
-            <span>实验名称</span>
-            <input v-model="experimentName" placeholder="例如 rerank-v2" />
-          </label>
-          <div class="experiment-toggles">
-            <label class="toggle">
-              <input v-model="rerank" type="checkbox" />
-              启用 Reranker
-            </label>
-            <label class="toggle">
-              <input v-model="queryRewrite" type="checkbox" />
-              启用 Query Rewrite
-            </label>
-            <label class="toggle">
-              <input v-model="answerEvaluation" type="checkbox" />
-              启用答案级评测
-            </label>
-          </div>
-          <button class="primary" :disabled="busy || !selectedDataset" @click="runEvaluation">
-            {{ busy ? '实验运行中' : '运行实验' }}
-          </button>
-        </div>
-      </section>
+      <EvaluationExperimentPanel
+        v-model:selected-dataset="selectedDataset"
+        v-model:retrieval-mode="retrievalMode"
+        v-model:top-k="topK"
+        v-model:query-version="queryVersion"
+        v-model:baseline-evaluation-id="baselineEvaluationId"
+        v-model:experiment-name="experimentName"
+        v-model:rerank="rerank"
+        v-model:query-rewrite="queryRewrite"
+        v-model:answer-evaluation="answerEvaluation"
+        :datasets="datasets"
+        :completed-evaluations="completedEvaluations"
+        :busy="busy"
+        @run="runEvaluation"
+      />
 
-      <section class="panel history-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">实验记录</p>
-            <h2>历史任务</h2>
-          </div>
-          <button class="ghost" @click="loadEvaluations">刷新</button>
-        </div>
-        <div class="history-list">
-          <button
-            v-for="evaluation in evaluations"
-            :key="evaluation.id"
-            class="history-row"
-            :class="{ active: selectedEvaluation?.id === evaluation.id }"
-            @click="selectEvaluation(evaluation)"
-          >
-            <span>
-              <strong>{{ evaluation.experiment_name || evaluation.dataset_name }}</strong>
-              <small>{{ evaluation.retrieval_mode }} · Top {{ evaluation.top_k }} · {{ evaluation.id.slice(0, 8) }}</small>
-            </span>
-            <span class="status" :class="evaluation.status">{{ evaluation.status }}</span>
-          </button>
-          <p v-if="!evaluations.length" class="empty">暂无评测实验</p>
-        </div>
-      </section>
+      <EvaluationHistoryPanel
+        :evaluations="evaluations"
+        :selected-evaluation="selectedEvaluation"
+        @select="selectEvaluation"
+        @refresh="loadEvaluations"
+      />
 
-      <section class="panel result-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">实验结果</p>
-            <h2>{{ selectedEvaluation?.experiment_name || '选择实验查看结果' }}</h2>
-          </div>
-          <span v-if="selectedEvaluation?.completed_at" class="muted">
-            {{ new Date(selectedEvaluation.completed_at).toLocaleString() }}
-          </span>
-        </div>
-
-        <p v-if="selectedEvaluation?.error_message" class="alert error">
-          {{ selectedEvaluation.error_message }}
-        </p>
-
-        <div v-if="selectedEvaluation?.results?.metrics" class="metric-grid">
-          <div
-            v-for="[key, value] in metricEntries(selectedEvaluation)"
-            :key="key"
-            class="metric"
-          >
-            <span>{{ metricLabel(key) }}</span>
-            <strong>{{ formatMetric(key, value) }}</strong>
-            <small
-              v-if="key in comparison"
-              :class="comparison[key] >= 0 ? 'positive' : 'negative'"
-            >
-              {{ comparison[key] >= 0 ? '+' : '' }}{{ comparison[key].toFixed(4) }} vs 基线
-            </small>
-          </div>
-        </div>
-
-        <div
-          v-if="selectedEvaluation?.results?.examples?.length"
-          class="example-results"
-        >
-          <details
-            v-for="(example, index) in selectedEvaluation.results.examples"
-            :key="String(example.example_id || index)"
-          >
-            <summary>
-              <span>{{ index + 1 }}. {{ example.question }}</span>
-              <span class="tag">{{ example.category }}</span>
-            </summary>
-            <div class="result-detail">
-              <p>
-                期望文档 {{ example.expected_document_id }}
-                <span v-if="example.expected_page"> · 第 {{ example.expected_page }} 页</span>
-              </p>
-              <p v-if="example.expected_answer">
-                标准答案：{{ example.expected_answer }}
-              </p>
-              <p v-if="example.generated_answer">
-                模型答案：{{ example.generated_answer }}
-              </p>
-              <div class="retrieved-list">
-                <span
-                  v-for="(item, itemIndex) in (example.retrieved as Array<Record<string, unknown>>)"
-                  :key="itemIndex"
-                  class="retrieved-item"
-                >
-                  {{ item.document_id }} / p{{ item.page }} / {{ Number(item.score).toFixed(4) }}
-                </span>
-              </div>
-              <p class="metrics-inline">
-                <span v-for="(value, key) in (example.metrics as Record<string, number>)" :key="key">
-                  {{ key }} {{ Number(value).toFixed(3) }}
-                </span>
-              </p>
-            </div>
-          </details>
-        </div>
-        <p v-else-if="!selectedEvaluation" class="empty">从历史任务中选择一次实验</p>
-      </section>
+      <EvaluationResultsPanel :evaluation="selectedEvaluation" :comparison="comparison" />
     </section>
   </main>
 </template>

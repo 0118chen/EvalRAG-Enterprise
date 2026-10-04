@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader native",
-    "build": "vue-tsc --noEmit && vite build --configLoader native"
+    "build": "vue-tsc --noEmit && vite build --configLoader native",
+    "test": "vitest run"
   },
   "dependencies": {
     "vue": "^3.5.13"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.5.1",
+    "jsdom": "^30.1.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
+    "vitest": "^5.0.3",
     "vue-tsc": "^2.2.0"
   }
 }

@@ -1,3 +1,6 @@
+import { getApiKey } from './auth'
+import { SSE_DONE, SseDecoder } from './sse'
+
 export type KnowledgeBase = {
   id: string
   tenant_id: string
@@ -32,13 +35,14 @@ export type RetrievalDiagnostics = {
   document_version: string | null
 }
 
+// null means "every version": the backend treats a null/blank version as no filter.
 export type SearchPayload = {
   tenant_id: string
   knowledge_base_id: string
   question: string
   top_k: number
   retrieval_mode: 'dense' | 'sparse' | 'hybrid'
-  document_version: string
+  document_version: string | null
   rerank: boolean
   query_rewrite: boolean
 }
@@ -93,16 +97,18 @@ export type EvaluationJob = {
   completed_at?: string
 }
 
-type StreamHandlers = {
+export type StreamHandlers = {
   onText: (text: string) => void
   onCitations: (items: Citation[]) => void
   onRetrieval?: (diagnostics: RetrievalDiagnostics) => void
   onTrace?: (traceId: string) => void
+  /** Terminal `event: error` frame (refused answer, generation failure). */
+  onError?: (message: string) => void
 }
 
 function requestHeaders(json = false): HeadersInit {
   const headers: Record<string, string> = {}
-  const apiKey = localStorage.getItem('evalrag_api_key')
+  const apiKey = getApiKey()
   if (apiKey) headers['X-API-Key'] = apiKey
   if (json) headers['Content-Type'] = 'application/json'
   return headers
@@ -205,26 +211,20 @@ export const api = {
     const reader = (await checked(response)).body?.getReader()
     if (!reader) throw new Error('浏览器不支持流式响应')
     const decoder = new TextDecoder()
-    let buffer = ''
-    let event = ''
+    const sse = new SseDecoder()
     while (true) {
       const { value, done } = await reader.read()
       if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const blocks = buffer.split('\n\n')
-      buffer = blocks.pop() || ''
-      for (const block of blocks) {
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event:')) event = line.slice(6).trim()
-          if (!line.startsWith('data:')) continue
-          const data = line.slice(5).trimStart()
-          if (data === '[DONE]') continue
-          if (event === 'citations') handlers.onCitations(JSON.parse(data))
-          if (event === 'retrieval') handlers.onRetrieval?.(JSON.parse(data))
-          if (event === 'trace') handlers.onTrace?.(JSON.parse(data).trace_id)
-          if (event === 'token') handlers.onText(JSON.parse(data))
+      for (const event of sse.push(decoder.decode(value, { stream: true }))) {
+        if (event.data === SSE_DONE) continue
+        if (event.event === 'citations') handlers.onCitations(JSON.parse(event.data))
+        if (event.event === 'retrieval') handlers.onRetrieval?.(JSON.parse(event.data))
+        if (event.event === 'trace') handlers.onTrace?.(JSON.parse(event.data).trace_id)
+        if (event.event === 'token') handlers.onText(JSON.parse(event.data))
+        if (event.event === 'error') {
+          const payload = JSON.parse(event.data) as { message?: string }
+          handlers.onError?.(payload.message || '回答流式传输失败')
         }
-        event = ''
       }
     }
   },
@@ -286,7 +286,7 @@ export const api = {
     dataset_name: string
     retrieval_mode: SearchPayload['retrieval_mode']
     top_k: number
-    document_version: string
+    document_version: string | null
     rerank: boolean
     query_rewrite: boolean
     answer_evaluation?: boolean
