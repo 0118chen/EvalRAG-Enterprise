@@ -274,6 +274,18 @@ def audit_set(
         "modes": dict(collections.Counter(e.mode for e in examples if not e.should_refuse)),
         "refusal_examples": sum(1 for e in examples if e.should_refuse),
         "examples_with_multiple_hops": sum(1 for e in examples if len(e.hops) > 1),
+        # A repeated question is not just untidy: it means two labels share one string, and
+        # any consumer that keys examples by question (the experiment harness used to) will
+        # silently score one of them against the other's documents. v1 had this check from
+        # the start; the generated sets did not, which is how v2 shipped a duplicate.
+        "duplicate_questions": [
+            {"question": question, "occurrences": count}
+            for question, count in collections.Counter(
+                e.question for e in examples
+            ).items()
+            if count > 1
+        ],
+        "unique_questions": len({e.question for e in examples}),
         "hops": {"total": hop_total, "quote_on_claimed_page": hop_verified},
         "quote_not_found_in_source": quote_missing,
         "quote_on_a_different_page": page_mismatch,
@@ -301,6 +313,12 @@ def audit_set(
 def print_set_report(label: str, report: dict[str, Any]) -> None:
     print(f"\n[{label}] golden set")
     print(f"  examples: {report['example_count']}  refusals: {report['refusal_examples']}")
+    print(
+        f"  unique questions: {report['unique_questions']} "
+        f"(duplicates: {len(report['duplicate_questions'])})"
+    )
+    for item in report["duplicate_questions"][:5]:
+        print(f"      - x{item['occurrences']} {item['question']}")
     print(f"  categories: {report['categories']}")
     print(f"  evidence modes: {report['modes']}")
     print(f"  examples with more than one hop: {report['examples_with_multiple_hops']}")
