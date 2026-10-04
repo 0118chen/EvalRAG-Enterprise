@@ -346,12 +346,18 @@ def extract_text(filename: str, payload: bytes) -> list[tuple[int, str]]:
     if lower.endswith(".pdf"):
         import pymupdf
 
-        document = pymupdf.open(stream=payload, filetype="pdf")
-        return [(index + 1, page.get_text()) for index, page in enumerate(document)]
+        pdf = pymupdf.open(stream=payload, filetype="pdf")
+        # Indexed access rather than iterating the document: pymupdf's Document iterates
+        # through the legacy __getitem__ protocol, which its stubs do not declare.
+        return [(index + 1, pdf[index].get_text()) for index in range(pdf.page_count)]
     if lower.endswith(".docx"):
         from docx import Document
-        document = Document(BytesIO(payload))
-        return [(1, "\n".join(paragraph.text for paragraph in document.paragraphs))]
+
+        # A separate name on purpose: reusing `document` here made one variable hold both
+        # a pymupdf and a python-docx document, and the second branch then "inherited" the
+        # first one's type.
+        docx_document = Document(BytesIO(payload))
+        return [(1, "\n".join(paragraph.text for paragraph in docx_document.paragraphs))]
     if lower.endswith((".html", ".htm")):
         return [(1, _extract_html(payload))]
     if lower.endswith(".xlsx"):

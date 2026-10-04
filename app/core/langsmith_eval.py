@@ -168,8 +168,8 @@ class LangSmithEvaluationAdapter:
             existing = list(client.list_examples(dataset_id=dataset_id))
             existing_keys = {
                 (
-                    item.inputs.get("question"),
-                    item.inputs.get("expected_document_id"),
+                    (item.inputs or {}).get("question"),
+                    (item.inputs or {}).get("expected_document_id"),
                 )
                 for item in existing
             }
@@ -236,7 +236,7 @@ class LangSmithEvaluationAdapter:
             return None
 
     @staticmethod
-    def recall_evaluator(inputs: dict[str, Any], outputs: dict[str, Any]) -> dict[str, float]:
+    def recall_evaluator(inputs: dict[str, Any], outputs: dict[str, Any]) -> dict[str, str | float]:
         example = RetrievalExample(
             inputs["question"],
             inputs["expected_document_id"],
@@ -245,7 +245,7 @@ class LangSmithEvaluationAdapter:
         return {"key": "recall_at_5", "score": recall_at_k(example, 5)}
 
     @staticmethod
-    def mrr_evaluator(inputs: dict[str, Any], outputs: dict[str, Any]) -> dict[str, float]:
+    def mrr_evaluator(inputs: dict[str, Any], outputs: dict[str, Any]) -> dict[str, str | float]:
         example = RetrievalExample(
             inputs["question"],
             inputs["expected_document_id"],

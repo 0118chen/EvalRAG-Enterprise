@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from elasticsearch.exceptions import ConnectionError as ElasticsearchConnectionError
 from elasticsearch.exceptions import ConnectionTimeout
@@ -254,7 +254,7 @@ class ElasticsearchChunkIndexer:
         try:
             try:
                 await self.ensure_index(client)
-                operations = []
+                operations: list[dict[str, Any]] = []
                 for chunk in chunks:
                     operations.extend(
                         (
@@ -273,7 +273,7 @@ class ElasticsearchChunkIndexer:
                     if response.get("errors"):
                         failures = []
                         for item in response.get("items", []):
-                            result = next(iter(item.values()), {})
+                            result: dict[str, Any] = next(iter(item.values()), {})
                             error = result.get("error")
                             if error:
                                 reason = (

@@ -13,10 +13,62 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.32,<1", "httpx>=0.28,
 evalrag = "app.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=9.0.3,<10", "ruff>=0.9,<1"]
+dev = [
+    "pytest>=9.0.3,<10",
+    "pytest-cov>=6,<8",
+    "mypy>=1.14,<2",
+    "ruff>=0.9,<1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Coverage is measured over the application only: tests and scripts are not the artifact
+# that ships. fail_under=80 sits below the 86.7% line coverage measured with stdlib
+# `trace --count --missing` over the full suite, which leaves room for harmless churn
+# (new branches covered later) without letting coverage slide by double digits.
+[tool.coverage.run]
+source = ["app"]
+branch = false
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+# Type checking is a gate, not advice: `mypy` with no arguments reads this file, so CI and
+# a local run check exactly the same thing. check_untyped_defs is on because most of the
+# codebase is typed but the untyped remainder still has to be free of the errors it can
+# see. disallow_untyped_defs is deliberately not on yet: 29 still-unannotated definitions
+# remain, and turning it on today would mean 29 annotations written to satisfy a linter
+# rather than a design.
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+strict_equality = true
+show_error_codes = true
+
+# These ship no py.typed marker, so mypy has nothing to check against: celery backs the
+# worker, sentence_transformers the cross-encoder reranker, pymilvus the vector backend
+# and openpyxl the spreadsheet reader. Every one of them is an optional code path.
+[[tool.mypy.overrides]]
+module = [
+    "celery.*",
+    "sentence_transformers.*",
+    "pymilvus",
+    "pymilvus.*",
+    "openpyxl",
+    "openpyxl.*",
+]
+ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 include = ["app*"]

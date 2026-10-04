@@ -7,6 +7,7 @@ status says which side of the line a file is on: without a backend a scan ends u
 `ready` with nothing to retrieve.
 """
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -54,11 +55,22 @@ class TesseractBackend:
             raise OcrUnavailableError(f"{filename}: the tesseract backend renders PDF pages only")
         document = pymupdf.open(stream=payload, filetype="pdf")
         pages: list[tuple[int, str]] = []
-        with tempfile.TemporaryDirectory() as directory:
+        # mkdtemp + rmtree(ignore_errors=True) rather than TemporaryDirectory(ignore_cleanup_errors=True):
+        # that flag does not cover this case. TemporaryDirectory cleans up through
+        # shutil.rmtree(onexc=...) and, on a PermissionError, its handler calls chmod to make
+        # the directory removable - a chmod that is itself denied raises straight out of
+        # __exit__, replacing the OcrUnavailableError the worker classifies on. A scratch
+        # PNG left behind is a much smaller problem than reporting the wrong reason, and
+        # the difference matters: OcrUnavailableError routes the document to `needs_ocr`
+        # (a human, or a deployment with an OCR engine) instead of a generic failure.
+        directory = tempfile.mkdtemp(prefix="evalrag-ocr-")
+        try:
             image = Path(directory) / "page.png"
-            for number, page in enumerate(document, start=1):
-                if number > self.max_pages:
-                    break
+            # Indexed access rather than `for page in document`: pymupdf's Document
+            # iterates through the legacy __getitem__ protocol, which its stubs do not
+            # declare, so the explicit page count keeps the loop type-checkable.
+            for number in range(1, min(document.page_count, self.max_pages) + 1):
+                page = document[number - 1]
                 page.get_pixmap(dpi=self.dpi).save(image)
                 try:
                     # Fixed argument list, no shell: no user input reaches the command.
@@ -74,6 +86,9 @@ class TesseractBackend:
                     stderr = result.stderr.decode("utf-8", "replace").strip()
                     raise OcrUnavailableError(f"tesseract exited {result.returncode}: {stderr[:200]}")
                 pages.append((number, result.stdout.decode("utf-8", "replace")))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+            document.close()
         return pages
 
 

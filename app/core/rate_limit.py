@@ -13,12 +13,13 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+REDIS_FAILURES: tuple[type[BaseException], ...]
 try:  # keep the memory limiter usable without the redis package
     from redis.exceptions import RedisError
 except ImportError:  # pragma: no cover - redis is a declared dependency
-    RedisError = OSError
-
-REDIS_FAILURES = (RedisError, OSError, RuntimeError, ValueError)
+    REDIS_FAILURES = (OSError, RuntimeError, ValueError)
+else:
+    REDIS_FAILURES = (RedisError, OSError, RuntimeError, ValueError)
 
 
 @dataclass(frozen=True)

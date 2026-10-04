@@ -8,12 +8,16 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
+
+# LangSmith's `trace()` accepts a fixed set of run types; mirroring it here means a typo
+# in a span's run type is a type error instead of a silently mis-categorised trace.
+RunType = Literal["tool", "chain", "llm", "retriever", "embedding", "prompt", "parser"]
 
 _SPAN_CONTEXT: ContextVar[tuple[tuple[str, str], ...]] = ContextVar(
     "evalrag_span_context",
@@ -45,7 +49,7 @@ def tenant_hash(tenant_id: str) -> str:
 @dataclass
 class SpanRecord:
     name: str
-    run_type: str
+    run_type: RunType
     span_id: str
     trace_id: str
     parent_id: str | None
@@ -113,7 +117,7 @@ class TraceManager:
         self,
         name: str,
         *,
-        run_type: str = "chain",
+        run_type: RunType = "chain",
         metadata: dict[str, Any] | None = None,
         inputs: Any = None,
         tags: list[str] | None = None,
@@ -171,7 +175,7 @@ class TraceManager:
         self,
         *,
         name: str,
-        run_type: str,
+        run_type: RunType,
         metadata: dict[str, Any],
         inputs: Any,
         tags: list[str] | None,

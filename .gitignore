@@ -5,6 +5,8 @@ __pycache__/
 .pytest_tmp/
 .ruff_cache/
 .coverage
+coverage.xml
+htmlcov/
 .env
 .env.*
 !.env.example
@@ -12,6 +14,8 @@ __pycache__/
 !.env.production.example
 *.egg-info/
 data/*.db
+data/*.db-wal
+data/*.db-shm
 data/*.log
 data/uploads/
 data/experiments/
