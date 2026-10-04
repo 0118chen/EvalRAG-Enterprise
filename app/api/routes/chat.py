@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import authenticate, get_container, get_llm, resolve_tenant_id
 from app.core.concurrency import run_blocking
 from app.core.observability import tenant_hash
-from app.core.rag import stream_with_evidence
+from app.core.rag import INSUFFICIENT_EVIDENCE, evidence_report, stream_with_evidence
 from app.schemas import Answer, Citation, RetrievalDiagnostics, SearchRequest
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ async def search(
             document_version=retrieval.document_version,
         )
         if not citations:
-            answer_text = "未找到足够依据，无法可靠回答该问题。"
+            answer_text = INSUFFICIENT_EVIDENCE
         else:
             answer_text = (
                 f"已检索到 {len(citations)} 条相关证据，"
@@ -225,14 +225,44 @@ async def chat_stream(
                         "answer_length": len("".join(answer_parts)),
                     }
                 )
-                if generation_failed:
+                # Tokens are already on the wire, so an unverifiable citation cannot be
+                # retracted - it has to be reported. The client sees a terminal error
+                # instead of a `trace` event, exactly as it does for a failed generation.
+                report = evidence_report("".join(answer_parts), retrieval.results)
+                rag_span.update_metadata(
+                    citations=len(report.citations),
+                    unknown_citations=len(report.unknown),
+                    ungrounded_citations=len(report.ungrounded),
+                )
+                citation_failed = not generation_failed and (
+                    not report.ok
+                    or (container.settings.citation_required and not report.cited)
+                )
+                if generation_failed or citation_failed:
+                    logger.warning(
+                        "stream answer rejected tenant=%s request_id=%s generation_failed=%s %s",
+                        tenant_hash(payload.tenant_id),
+                        request.state.request_id,
+                        generation_failed,
+                        report.summary(),
+                    )
+                    if citation_failed:
+                        rag_span.set_error("unverifiable citation")
                     yield "event: error\n"
                     yield (
                         "data: "
                         + json.dumps(
                             {
-                                "code": "generation_failed",
-                                "message": "模型生成失败，请稍后重试。",
+                                "code": (
+                                    "ungrounded_citation"
+                                    if citation_failed
+                                    else "generation_failed"
+                                ),
+                                "message": (
+                                    "回答中的引用无法在检索证据中核实，已拒绝该回答。"
+                                    if citation_failed
+                                    else "模型生成失败，请稍后重试。"
+                                ),
                             },
                             ensure_ascii=False,
                         )

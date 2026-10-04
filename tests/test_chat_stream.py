@@ -35,8 +35,9 @@ class _ControlledStreamingLLM:
 
 async def _exercise_stream(monkeypatch):
     records = []
-    traces = TraceManager(Settings(langsmith_enabled=False), records.append)
-    container = SimpleNamespace(traces=traces)
+    settings = Settings(langsmith_enabled=False)
+    traces = TraceManager(settings, records.append)
+    container = SimpleNamespace(traces=traces, settings=settings)
     retrieval = RetrievalResult(
         results=[(Chunk("chunk-1", "doc-1", 1, "evidence"), 0.9)],
         trace_id="retrieval-trace",
@@ -110,6 +111,17 @@ class _FailingStreamingLLM:
         raise self.error
 
 
+class _MisCitingStreamingLLM:
+    """Streams an answer that cites a document the retrieval never returned."""
+
+    async def answer(self, question: str, context: str) -> str:
+        raise AssertionError("streaming route must not call answer()")
+
+    async def stream(self, question: str, context: str):
+        yield "依据 [doc-9 p.3] 的规定，"
+        yield "应当如此办理。"
+
+
 class _CloseAwareStreamingLLM:
     def __init__(self) -> None:
         self.closed = False
@@ -127,8 +139,9 @@ class _CloseAwareStreamingLLM:
 
 async def _make_response(monkeypatch, llm):
     records = []
-    traces = TraceManager(Settings(langsmith_enabled=False), records.append)
-    container = SimpleNamespace(traces=traces)
+    settings = Settings(langsmith_enabled=False)
+    traces = TraceManager(settings, records.append)
+    container = SimpleNamespace(traces=traces, settings=settings)
     retrieval_contexts: list[str | None] = []
     retrieval = RetrievalResult(
         results=[(Chunk("chunk-1", "doc-1", 1, "evidence"), 0.9)],
@@ -282,3 +295,35 @@ def test_chat_stream_logs_the_provider_failure_for_operators(monkeypatch, caplog
     failures = [record for record in caplog.records if record.name == "app.api.routes.chat"]
     assert [record.getMessage() for record in failures], "no log record for the failure"
     assert any(record.exc_info for record in failures), "exception not attached to the log"
+
+
+def test_chat_stream_reports_an_answer_that_cites_unretrieved_evidence(monkeypatch) -> None:
+    """Tokens are already on the wire, so an unverifiable citation cannot be retracted.
+
+    The stream therefore ends with a terminal error instead of a `trace` event, exactly as
+    a failed generation does, and the trace records what could not be verified.
+    """
+
+    async def exercise():
+        response, records, _contexts = await _make_response(
+            monkeypatch, _MisCitingStreamingLLM()
+        )
+        return [chunk async for chunk in response.body_iterator], records
+
+    chunks, records = asyncio.run(exercise())
+    stream = "".join(chunks)
+
+    assert "依据 [doc-9 p.3] 的规定，" in stream
+    assert '"code": "ungrounded_citation"' in stream
+    assert "event: error\n" in stream
+    assert "event: trace\n" not in stream
+    assert stream.endswith("data: [DONE]\n\n")
+
+    rag = next(record for record in records if record.name == "rag.request")
+    assert rag.error == "unverifiable citation"
+    assert rag.metadata["citations"] == 1
+    assert rag.metadata["unknown_citations"] == 1
+    assert rag.metadata["ungrounded_citations"] == 0
+    # The generation itself succeeded, so it is not marked failed.
+    generation = next(record for record in records if record.name == "generation.answer")
+    assert generation.error is None
