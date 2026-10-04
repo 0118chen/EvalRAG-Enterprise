@@ -23,6 +23,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The report uses ✓ and ✗, which a legacy console code page (cp936 on this machine) cannot
+# encode. An unencodable character raises UnicodeEncodeError *while printing*, which turned a
+# passing quality gate into a non-zero exit - the worst possible failure mode for a check whose
+# whole job is to be trusted. Degrade the characters, never the exit code.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
+
 
 def quality_metrics(entry: dict) -> dict[str, float]:
     """Every numeric quality scalar of a config: metrics{} plus evidence stats.

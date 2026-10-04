@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     query_rewrite_enabled: bool = True
     rerank_enabled: bool = True
     rerank_backend: str = "lexical"
+    # A citation naming a document or page we never retrieved is always refused. Demanding
+    # that an answer cite *something* is a separate, stricter policy, and it is off by
+    # default because mock and some local providers legitimately emit no citation at all.
+    citation_required: bool = False
     # TypeSafe is the semantic second stage: one typed Noul judgment per (query, candidate)
     # pair, scored by a model that reads both. Off unless a key is configured, because it is
     # a paid third-party call and it sends the candidate text to them (see docs §11).
@@ -56,6 +60,15 @@ class Settings(BaseSettings):
     typesafe_model: str = "jev-latest"
     typesafe_concurrency: int = 8
     retrieval_candidate_multiplier: int = 4
+    # Retrieval experiments cover tens to hundreds of questions, each of which may hit a
+    # paid embedding backend, a reranker and (with answer evaluation) two LLM calls. Bounded
+    # concurrency turns an hour-long sequential run into minutes without hammering anyone's
+    # rate limit; the per-example timeout keeps one stalled call from holding the whole run,
+    # and every finished example is checkpointed so a crashed run resumes instead of
+    # starting over. The bound is a per-example gate, not a global one: the Typesafe
+    # reranker keeps its own (TYPESAFE_CONCURRENCY).
+    evaluation_concurrency: int = 4
+    evaluation_example_timeout_seconds: float = 120.0
     evaluation_inline_fallback: bool = False
     max_upload_mb: int = 50
     ocr_backend: str = "none"

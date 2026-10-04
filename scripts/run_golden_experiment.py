@@ -32,6 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 LAW_DIR = ROOT / "law"
 GOLDEN_EVAL = LAW_DIR / "golden_eval_v1.json"
 TOP_K = 5
+# human review of the judge needs the evidence the judge saw, but the artifact stays
+# committable only if the excerpts are bounded: top few chunks, first few hundred chars.
+JUDGE_EVIDENCE_CHUNKS = 3
+JUDGE_EVIDENCE_CHARS = 400
 
 CONFIGS: list[dict[str, Any]] = [
     {
@@ -266,7 +270,11 @@ def build_dataset(
         examples=prepared,
     )
     store.save_evaluation_dataset(dataset)
-    return dataset, {example.question: example for example in examples}
+    # Keyed by the dataset example id, never by the question text. Two examples can share
+    # a question (v2 ships one such pair, about two different regulations) and a
+    # question-keyed map silently drops one of them, scoring those rows against the other
+    # example's expected documents. The id is what the runner echoes back per row.
+    return dataset, {prepared[index].id: example for index, example in enumerate(examples)}
 
 
 def _probability_all_hops_hit(counts: list[int], total: int, draws: int) -> float:
@@ -313,7 +321,7 @@ def _probability_any_hop_hit(counts: list[int], total: int, draws: int) -> float
 def random_reference(
     store,
     kb_id: str,
-    golden_by_question: dict[str, GoldenExample],
+    golden_by_id: dict[str, GoldenExample],
     by_filename: dict[str, str],
 ) -> dict[str, float]:
     """Document- and page-level hit rates a random 5-chunk draw would reach.
@@ -335,7 +343,7 @@ def random_reference(
 
     document_hits: list[float] = []
     page_hits: list[float] = []
-    for example in golden_by_question.values():
+    for example in golden_by_id.values():
         if example.should_refuse or not example.hops:
             continue
         document_counts = [
@@ -363,8 +371,16 @@ def random_reference(
 
 
 def run_config(
-    store, settings, retrieval_service, traces, tenant_id, kb_id, dataset, config
+    store, settings, retrieval_service, traces, tenant_id, kb_id, dataset, config,
+    *, answer_evaluation: bool = False,
 ) -> dict:
+    # 检索指标不需要 LLM，所以默认这条路径是免费且确定的；只有显式要求时才构造 provider，
+    # 让"不配 key 也能跑实验"这件事继续成立。
+    llm = None
+    if answer_evaluation:
+        from app.core.llm import create_llm
+
+        llm = create_llm(settings)
     evaluation_id = str(uuid4())
     store.create_evaluation(
         evaluation_id,
@@ -380,7 +396,7 @@ def run_config(
             "rerank": config["rerank"],
             "query_rewrite": config["query_rewrite"],
             "fusion": config.get("fusion"),
-            "answer_evaluation": False,
+            "answer_evaluation": answer_evaluation,
         },
     )
     from app.core.evaluation_runner import EvaluationRunner
@@ -392,7 +408,7 @@ def run_config(
             retrieval_service=retrieval_service,
             traces=traces,
             langsmith=None,
-            llm=None,
+            llm=llm,
         ).run(evaluation_id)
     )
     evaluation = store.get_evaluation(evaluation_id)
@@ -410,7 +426,7 @@ def _quote_found(example: GoldenExample, retrieved: list[dict]) -> bool:
     return any(hits) if example.mode == "any" else all(hits)
 
 
-def per_example(results: dict, golden_by_question: dict[str, GoldenExample]) -> list[dict]:
+def per_example(results: dict, golden_by_id: dict[str, GoldenExample]) -> list[dict]:
     """Per-question rows, so a headline number can be traced back to its questions.
 
     Chunk text stays out of here on purpose: the point is to make claims checkable
@@ -418,45 +434,66 @@ def per_example(results: dict, golden_by_question: dict[str, GoldenExample]) -> 
     """
     rows = []
     for item in results["examples"]:
-        golden = golden_by_question[item["question"]]
+        golden = golden_by_id[item["example_id"]]
         retrieved = item["retrieved"]
-        rows.append(
-            {
-                "question": item["question"],
-                "category": item["category"],
-                "source_filename": (
-                    golden.hops[0].source_filename if golden.hops else None
-                ),
-                "source_filenames": list(golden.source_filenames),
-                "evidence_mode": golden.mode,
-                "should_refuse": golden.should_refuse,
-                "expected_page": item["expected_page"],
-                "recall_at_1": item["metrics"].get("recall_at_1"),
-                "recall_at_3": item["metrics"].get("recall_at_3"),
-                "recall_at_5": item["metrics"].get("recall_at_5"),
-                "all_targets_at_5": item["metrics"].get("all_targets_at_5"),
-                "any_target_at_5": item["metrics"].get("any_target_at_5"),
-                "page_hit": item["metrics"].get("page_hit"),
-                "retrieved_something": item["metrics"].get("retrieved_something"),
-                "quote_hit": _quote_found(golden, retrieved),
-                "passage_rank": item.get("passage_rank"),
-                "passage_ranks": item.get("passage_ranks"),
-                "top_score": round(max((c["score"] for c in retrieved), default=0.0), 4),
-                "latency_ms": round(item["latency_ms"], 1),
-                "retrieved": [
-                    {
-                        "document_id": chunk["document_id"],
-                        "page": chunk["page"],
-                        "score": round(chunk["score"], 4),
-                    }
-                    for chunk in retrieved
-                ],
+        row = {
+            "question": item["question"],
+            "category": item["category"],
+            "source_filename": (
+                golden.hops[0].source_filename if golden.hops else None
+            ),
+            "source_filenames": list(golden.source_filenames),
+            "evidence_mode": golden.mode,
+            "should_refuse": golden.should_refuse,
+            "expected_page": item["expected_page"],
+            "recall_at_1": item["metrics"].get("recall_at_1"),
+            "recall_at_3": item["metrics"].get("recall_at_3"),
+            "recall_at_5": item["metrics"].get("recall_at_5"),
+            "all_targets_at_5": item["metrics"].get("all_targets_at_5"),
+            "any_target_at_5": item["metrics"].get("any_target_at_5"),
+            "page_hit": item["metrics"].get("page_hit"),
+            "retrieved_something": item["metrics"].get("retrieved_something"),
+            "quote_hit": _quote_found(golden, retrieved),
+            "passage_rank": item.get("passage_rank"),
+            "passage_ranks": item.get("passage_ranks"),
+            "top_score": round(max((c["score"] for c in retrieved), default=0.0), 4),
+            "latency_ms": round(item["latency_ms"], 1),
+            "retrieved": [
+                {
+                    "document_id": chunk["document_id"],
+                    "page": chunk["page"],
+                    "score": round(chunk["score"], 4),
+                }
+                for chunk in retrieved
+            ],
+        }
+        # 只有跑过答案评测的行才带答案与裁判分数：检索专用产物（docs/evaluation 里那批历史
+        # 文件）保持原样，新增的键不会让同一份报告在不同运行之间形状不同。
+        if item.get("generated_answer") is not None:
+            row["generated_answer"] = item["generated_answer"]
+            row["expected_answer"] = item.get("expected_answer")
+            row["judge"] = {
+                "correctness": item["metrics"].get("answer_correctness"),
+                "faithfulness": item["metrics"].get("answer_faithfulness"),
+                "completeness": item["metrics"].get("answer_completeness"),
+                "reason": item.get("judge_reason"),
             }
-        )
+            # 人工复核要能看裁判看到的证据，否则"忠实度"根本无从判断；截断到前若干字，
+            # 让产物保持可提交的大小。
+            row["evidence"] = [
+                {
+                    "document_id": chunk["document_id"],
+                    "page": chunk["page"],
+                    "score": round(chunk["score"], 4),
+                    "text": chunk["text"][:JUDGE_EVIDENCE_CHARS],
+                }
+                for chunk in sorted(retrieved, key=lambda c: -c["score"])[:JUDGE_EVIDENCE_CHUNKS]
+            ]
+        rows.append(row)
     return rows
 
 
-def evidence_stats(results: dict, golden_by_question: dict[str, GoldenExample]) -> dict[str, float]:
+def evidence_stats(results: dict, golden_by_id: dict[str, GoldenExample]) -> dict[str, float]:
     """A retrieved chunk containing the ground-truth quote is the passage that answers it.
 
     Deliberately re-implemented here rather than read from the evaluation results: the
@@ -466,7 +503,7 @@ def evidence_stats(results: dict, golden_by_question: dict[str, GoldenExample]) 
     answerable = refusal_found = refusal_total = 0
     exact = 0
     for item in results["examples"]:
-        golden = golden_by_question[item["question"]]
+        golden = golden_by_id[item["example_id"]]
         if golden.should_refuse:
             refusal_total += 1
             refusal_found += int(bool(item["retrieved"]))
@@ -530,6 +567,15 @@ def main() -> None:
         help=(
             "comma-separated subset of CONFIGS names to run (default: all). Needed for the "
             "paid rerank backends, where running the whole matrix would be 10x the cost."
+        ),
+    )
+    parser.add_argument(
+        "--answer-evaluation",
+        action="store_true",
+        help=(
+            "ask the configured LLM (LLM_PROVIDER/LLM_API_KEY) to answer every question and have "
+            "the judge score it: 2 paid calls per example per config. Off by default, because the "
+            "retrieval numbers this script exists for are deterministic and free."
         ),
     )
     parser.add_argument(
@@ -607,7 +653,7 @@ def main() -> None:
     chunk_count = len(store.get_chunks(kb_id, "latest"))
     print(f"indexed {chunk_count} chunks across {len(by_filename)} documents")
 
-    dataset, golden_by_question = build_dataset(
+    dataset, golden_by_id = build_dataset(
         store,
         args.tenant,
         kb_id,
@@ -649,14 +695,23 @@ def main() -> None:
             if answer.strip().lower() not in {"y", "yes"}:
                 raise SystemExit("已取消（要跳过确认加 --yes）")
 
+    if args.answer_evaluation:
+        # 每题两次付费调用：一次生成答案、一次裁判打分。这里只报账不拦截（TypeSafe 那套
+        # 阈值针对的是重排的十倍价差，而答案评测最贵也就几美分）。
+        print(
+            f"答案评测：{len(selected)} 个配置 x {len(dataset.examples)} 题 x 2 次调用"
+            f"（生成 + 裁判，模型 {settings.llm_model}）\n"
+        )
+
     configs: list[dict[str, Any]] = []
     last_results: dict | None = None
     last_config: dict | None = None
     for config in selected:
         results = run_config(
-            store, settings, retrieval_service, traces, args.tenant, kb_id, dataset, config
+            store, settings, retrieval_service, traces, args.tenant, kb_id, dataset, config,
+            answer_evaluation=args.answer_evaluation,
         )
-        evidence = evidence_stats(results, golden_by_question)
+        evidence = evidence_stats(results, golden_by_id)
         product_passage = results["metrics"].get("passage_hit")
         entry = {
             "name": config["name"],
@@ -670,7 +725,7 @@ def main() -> None:
             **evidence,
             "passage_cross_check": product_passage is None
             or abs(product_passage - evidence["evidence_quote_hit_rate"]) < 1e-9,
-            "per_example": per_example(results, golden_by_question),
+            "per_example": per_example(results, golden_by_id),
         }
         configs.append(entry)
         last_results, last_config = results, entry
@@ -726,7 +781,7 @@ def main() -> None:
             "sparse_backend": settings.sparse_retrieval_backend,
         },
         "configs": configs,
-        "reference": random_reference(store, kb_id, golden_by_question, by_filename),
+        "reference": random_reference(store, kb_id, golden_by_id, by_filename),
         "by_category": (
             {last_config["name"]: category_table(last_config["per_example"])}
             if last_results and last_config

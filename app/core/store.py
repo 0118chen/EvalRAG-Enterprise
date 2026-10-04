@@ -1,6 +1,7 @@
 """Database persistence shared by local development and production deployments."""
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -8,6 +9,7 @@ from typing import cast
 from sqlalchemy import and_, create_engine, delete, event, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 from app.core.ingestion import Chunk
 from app.db.models import (
@@ -25,6 +27,7 @@ from app.schemas import (
     Document,
     EvaluationDataset,
     EvaluationExample,
+    EvidenceMode,
     EvidenceSpan,
     KnowledgeBase,
 )
@@ -41,22 +44,51 @@ def normalize_database_url(database_url: str) -> str:
     return database_url
 
 
+def _is_memory_sqlite(database_url: str) -> bool:
+    """In-memory SQLite exists only inside its connection, so it needs one shared one."""
+    return database_url.startswith("sqlite") and (
+        ":memory:" in database_url or "mode=memory" in database_url
+    )
+
+
 class SQLAlchemyStore:
     """Synchronous SQLAlchemy store for SQLite and PostgreSQL."""
 
     def __init__(self, database_url: str) -> None:
         self.database_url = normalize_database_url(database_url)
         connect_args = {"check_same_thread": False} if self.database_url.startswith("sqlite") else {}
-        self.engine = create_engine(self.database_url, pool_pre_ping=True, connect_args=connect_args)
+        self._memory_sqlite = _is_memory_sqlite(self.database_url)
+        # An in-memory SQLite database exists only inside its connection, so it must be
+        # served by one shared connection (StaticPool) rather than a per-thread pool that
+        # would hand each thread its own empty database. SQLAlchemy infers this from the
+        # URL today but warns that it will stop doing so, so it is stated explicitly.
+        poolclass = StaticPool if self._memory_sqlite else None
+        self.engine = create_engine(
+            self.database_url,
+            pool_pre_ping=True,
+            connect_args=connect_args,
+            poolclass=poolclass,
+        )
         if self.database_url.startswith("sqlite"):
-            event.listen(self.engine, "connect", self._enable_sqlite_foreign_keys)
+            event.listen(self.engine, "connect", self._configure_sqlite_connection)
             Base.metadata.create_all(self.engine)
             self._upgrade_sqlite_schema()
 
-    @staticmethod
-    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    def _configure_sqlite_connection(self, dbapi_connection, _connection_record) -> None:
+        """Settings every SQLite connection needs to survive concurrent request threads.
+
+        ``foreign_keys`` is off by default in SQLite, so the schema's cascades and checks
+        would otherwise silently not apply. ``busy_timeout`` makes a writer wait for a
+        concurrent writer instead of failing straight away with "database is locked",
+        which is what several threads sharing one database file hit first. WAL lets
+        readers keep reading while a writer commits; it is a property of the file, so it
+        is skipped for the in-memory database shared through a single connection.
+        """
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        if not self._memory_sqlite:
+            cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
 
     def _upgrade_sqlite_schema(self) -> None:
@@ -599,7 +631,7 @@ class SQLAlchemyStore:
     @staticmethod
     def _evaluation_dataset(
         record: EvaluationDatasetRecord,
-        examples: list[EvaluationExampleRecord],
+        examples: Sequence[EvaluationExampleRecord],
     ) -> EvaluationDataset:
         return EvaluationDataset(
             id=record.id,
@@ -619,7 +651,7 @@ class SQLAlchemyStore:
                     evidence_quote=example.evidence_quote,
                     category=example.category,
                     should_refuse=bool(example.should_refuse),
-                    evidence_mode=example.evidence_mode,
+                    evidence_mode=cast(EvidenceMode, example.evidence_mode),
                     expected_evidence=[
                         EvidenceSpan(**span)
                         for span in (
