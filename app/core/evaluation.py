@@ -83,9 +83,16 @@ def recall_at_k(example: RetrievalExample, k: int) -> float:
     With one expected document this is the usual 0/1 Recall@k; with several it is a set
     recall, which is the only honest way to score a question whose answer needs two
     documents — finding the first hop is partial credit, not success.
+
+    Under ``mode="any"`` the labels are interchangeable alternatives, so set recall asks
+    the wrong question: a ranking that retrieves the one document that answers the
+    question would be scored 1/3 just because the other two equivalents were not asked
+    about. There the answer is all-or-nothing, exactly like ``any_target_at_k``.
     """
     if not example.targets:
         return 0.0
+    if example.mode == "any":
+        return any_target_at_k(example, k)
     ranks = _ranks(example)
     found = sum(1 for target in example.targets if ranks.get(target, k + 1) <= k)
     return found / len(example.targets)
@@ -128,6 +135,14 @@ def reciprocal_rank(example: RetrievalExample) -> float:
 
 
 def precision_at_k(example: RetrievalExample, k: int) -> float:
+    """Share of the first ``k`` *passages* whose document is an expected one.
+
+    Note the mixed unit: the retrieved list is chunk-level while the labels are
+    document-level, and a document contributes ~21 chunks on this corpus, so this is
+    a passage-precision proxy rather than the document precision@k of the IR literature.
+    It is kept for continuity - no published table reports it, and ``all_targets@k`` /
+    ``any_target@k`` are the keys that carry the document-level verdict.
+    """
     if k <= 0:
         return 0.0
     targets = set(example.targets)
@@ -137,10 +152,16 @@ def precision_at_k(example: RetrievalExample, k: int) -> float:
 
 
 def ndcg_at_k(example: RetrievalExample, k: int) -> float:
-    """Per-hop gain; discounting is per target rather than over a single result list.
+    """Discounted gain over the labelled hops, divided by the ideal ranking's gain.
 
-    A hop that was never retrieved scores 0 under ``all`` and cannot drag the score
-    down under ``any``: the two modes ask different questions of the same ranking.
+    Dividing by the number of hops (the previous behaviour) is not nDCG: two relevant
+    passages cannot both sit at rank 1, so the best reachable value for a two-hop example
+    was ``(1 + 1/log2(3)) / 2 = 0.8155`` instead of 1.0, and a three-hop example could
+    never beat 0.7103. Normalising by ``IDCG = sum(1/log2(i+1) for i in 1..n)`` restores
+    the 1.0 ceiling, which is what makes the number comparable across datasets.
+
+    A hop that was never retrieved scores 0, and under ``mode="any"`` the labels are
+    alternatives: one relevant item whose ideal rank is 1, so IDCG is 1.
     """
     if not example.targets:
         return 0.0
@@ -150,10 +171,15 @@ def ndcg_at_k(example: RetrievalExample, k: int) -> float:
             [1.0 / log2(rank + 1) for rank in ranks.values() if 0 < rank <= k],
             "any",
         )
-    return fmean(
+    gain = sum(
         1.0 / log2(ranks[target] + 1) if 0 < ranks.get(target, k + 1) <= k else 0.0
         for target in example.targets
     )
+    ideal = sum(
+        1.0 / log2(index + 1)
+        for index in range(1, min(len(example.targets), k) + 1)
+    )
+    return gain / ideal if ideal else 0.0
 
 
 def _without_whitespace(text: str) -> str:

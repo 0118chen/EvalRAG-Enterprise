@@ -82,3 +82,29 @@ def test_passage_metrics_reward_finding_the_passage_and_ranking_it_first() -> No
     missing = passage_metrics(["other", "more"], quote)
     assert missing == {"passage_hit": 0.0, "passage_at_1": 0.0, "passage_mrr": 0.0}
 
+
+def test_ndcg_reaches_one_when_every_hop_is_ranked_as_well_as_possible() -> None:
+    # Two hops cannot both sit at rank 1, so the ideal ranking is rank 1 and rank 2.
+    # Dividing by the hop count instead of that ideal capped this at (1 + 1/log2(3))/2
+    # = 0.8155 - a perfect ranking that could never be scored as perfect.
+    perfect = RetrievalExample("q", ("doc-a", "doc-b"), ["doc-a", "doc-b"])
+    assert metrics_at_k(perfect, (5,))["ndcg_at_5"] == 1.0
+
+    reversed_but_ideal = RetrievalExample("q", ("doc-a", "doc-b"), ["doc-b", "doc-a"])
+    assert metrics_at_k(reversed_but_ideal, (5,))["ndcg_at_5"] == 1.0
+
+    single = RetrievalExample("q", "doc-a", ["doc-a"])
+    assert metrics_at_k(single, (5,))["ndcg_at_5"] == 1.0
+
+
+def test_ndcg_falls_when_a_hop_slips_past_its_ideal_rank() -> None:
+    example = RetrievalExample("q", ("doc-a", "doc-b"), ["doc-a", "noise", "doc-b"])
+
+    value = metrics_at_k(example, (5,))["ndcg_at_5"]
+
+    # doc-b landed at rank 3 instead of rank 2: better than nothing, worse than ideal.
+    assert 0.9 < value < 0.95
+    assert value < 1.0
+    # Past the cutoff the hop is simply not retrieved.
+    assert metrics_at_k(example, (2,))["ndcg_at_2"] < value
+

@@ -78,7 +78,11 @@ def test_any_mode_reports_its_own_target_key() -> None:
     assert "all_targets_at_2" not in metrics
     assert metrics["any_target_at_1"] == 0.0  # doc-b is second, not first
     assert metrics["any_target_at_2"] == 1.0
-    assert metrics["recall_at_2"] == 1 / 3  # one of three equivalent documents
+    # Equivalent labels answer the question individually, so recall is all-or-nothing
+    # here: scoring "one of three equivalents" as 1/3 marked a *correct* answer down for
+    # the two documents the retriever was never asked about.
+    assert metrics["recall_at_1"] == 0.0
+    assert metrics["recall_at_2"] == 1.0
     assert metrics["mrr"] == 0.5  # the best hop, not the mean of the three
 
 

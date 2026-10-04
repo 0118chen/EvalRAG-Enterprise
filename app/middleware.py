@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from app.container import AppContainer
+from app.core.metrics import normalize_path
 
 # Cheap endpoints that must not consume the rate limit budget: orchestrator
 # probes, Prometheus scraping and the docs page. Everything else, including the
@@ -49,13 +50,32 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _path_label(request: Request) -> str:
+    """The route template, e.g. ``/api/v1/documents/{document_id}``.
+
+    Using the raw path instead would put a fresh document id in a metric label on
+    every request, leaking memory in-process and cardinality in Prometheus. Starlette
+    exposes the matched template on the scope; when it does not, the identifiers are
+    rebuilt from the path parameters, and as a last resort collapsed by hand - which
+    is what covers a 404, where nothing matched at all.
+    """
+    template = getattr(request.scope.get("route"), "path", None)
+    if template:
+        return template
+    path = request.url.path
+    for name, value in (request.scope.get("path_params") or {}).items():
+        if isinstance(value, str) and value:
+            path = path.replace(f"/{value}", f"/{{{name}}}")
+    return normalize_path(path)
+
+
 class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         container: AppContainer = request.app.state.container
         started = perf_counter()
         response = await call_next(request)
         container.metrics.observe(
-            request.url.path,
+            _path_label(request),
             response.status_code,
             perf_counter() - started,
         )
