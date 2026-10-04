@@ -24,7 +24,7 @@ from app.core.embeddings import (
 )
 from app.core.errors import BackendUnavailableError
 from app.core.ingestion import Chunk
-from app.core.retrieval import Fusion, cosine_similarity, fuse_rankings, retrieve
+from app.core.retrieval import BM25Index, Fusion, cosine_similarity, fuse_rankings, retrieve
 
 logger = logging.getLogger(__name__)
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -77,15 +77,25 @@ class LocalRetriever:
     mode: str = "hybrid"
     embedding: EmbeddingProvider | None = None
     fusion: Fusion | None = None
+    # Built once here, not once per query: the term statistics depend on the corpus, and
+    # this retriever is cached per (knowledge base, version, mode, fusion, corpus
+    # fingerprint), so one build serves every query in between.
+    bm25: BM25Index | None = None
+
+    def __post_init__(self) -> None:
+        if self.bm25 is None and self.mode in {"sparse", "hybrid"}:
+            self.bm25 = BM25Index([chunk.text for chunk in self.chunks])
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         if self.mode == "sparse":
             # BM25 needs term statistics, not vectors: this path must not touch the embedding
             # provider at all (it used to, for every chunk in the corpus).
-            return retrieve(query, self.chunks, top_k, "sparse")
+            return retrieve(query, self.chunks, top_k, "sparse", index=self.bm25)
         embedding = self.embedding
         if embedding is None:
-            return retrieve(query, self.chunks, top_k, self.mode, fusion=self.fusion)
+            return retrieve(
+                query, self.chunks, top_k, self.mode, fusion=self.fusion, index=self.bm25
+            )
         # Query and corpus in one batch: the provider then decides how many requests that is
         # (one for a local model, ceil(n / batch_size) for an HTTP API), and cached vectors
         # never leave the process.
@@ -99,7 +109,7 @@ class LocalRetriever:
         dense.sort(key=lambda item: item[1], reverse=True)
         if self.mode == "dense":
             return dense[:top_k]
-        sparse = retrieve(query, self.chunks, top_k, "sparse")
+        sparse = retrieve(query, self.chunks, top_k, "sparse", index=self.bm25)
         return fuse_rankings(dense, sparse, self.fusion or Fusion(), top_k)
 
 

@@ -14,15 +14,16 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+REDIS_FAILURES: tuple[type[BaseException], ...]
 try:  # keep the memory and null backends usable without the redis package
     from redis.exceptions import RedisError
 except ImportError:  # pragma: no cover - redis is a declared dependency
-    RedisError = OSError
-
-# redis-py raises its own ConnectionError/TimeoutError subclasses, which are not the
-# builtin ones. Catching the library base class is what makes a Redis outage degrade
-# instead of surfacing as a 500.
-REDIS_FAILURES = (RedisError, OSError, RuntimeError, ValueError)
+    REDIS_FAILURES = (OSError, RuntimeError, ValueError)
+else:
+    # redis-py raises its own ConnectionError/TimeoutError subclasses, which are not the
+    # builtin ones. Catching the library base class is what makes a Redis outage degrade
+    # instead of surfacing as a 500.
+    REDIS_FAILURES = (RedisError, OSError, RuntimeError, ValueError)
 
 
 class Cache(Protocol):
