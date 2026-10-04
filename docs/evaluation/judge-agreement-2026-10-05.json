@@ -1,0 +1,115 @@
+{
+  "labeller": "ai-platform-audit-2026-10-05",
+  "note": "Labeller: the AI agent that built this platform (not a domain expert, and it wrote no part of the judge prompt). Procedure: correctness = the answer states the same fact as expected_answer (a refusal scores 0 even when the retrieval step, not the model, is at fault); completeness = it covers every part of the question; faithfulness = every claim it makes is supported by the evidence excerpts in this file. Every sentence the system answer added on top of the expected answer was checked against the corpus with grep (e.g. 管理费不得从借款本金中扣除 = 02_互助社实施细则.txt:5, 小型农机具三万元 = 01_互助资金管理办法.md:9), so the positives are not believed on the judge's word. Two caveats make this kappa a lower bound rather than a clean inter-rater statistic: (1) the labeller saw the judge block while scoring, so agreement on correctness and completeness is partly circular; (2) the labeller read the same evidence excerpts the judge read. The one disagreement that is not circular is faithfulness: the judge scores 0.0 there whenever the answer is wrong, even when refusing was the faithful thing to do.",
+  "threshold": 0.5,
+  "iterations": 2000,
+  "seed": 20261005,
+  "metrics": {
+    "correctness": {
+      "metric": "correctness",
+      "n": 32,
+      "unscored": 0,
+      "unlabelled": 0,
+      "agreement": 1.0,
+      "kappa": 1.0,
+      "interpretation": "almost perfect",
+      "confusion": {
+        "tp": 28,
+        "fp": 0,
+        "fn": 0,
+        "tn": 4
+      },
+      "judge_positive_rate": 0.875,
+      "label_positive_rate": 0.875,
+      "mean_absolute_difference": 0.0,
+      "kappa_interval": [
+        1.0,
+        1.0
+      ],
+      "disagreements": []
+    },
+    "faithfulness": {
+      "metric": "faithfulness",
+      "n": 32,
+      "unscored": 0,
+      "unlabelled": 0,
+      "agreement": 0.875,
+      "kappa": 0.0,
+      "interpretation": "slight",
+      "confusion": {
+        "tp": 28,
+        "fp": 0,
+        "fn": 4,
+        "tn": 0
+      },
+      "judge_positive_rate": 0.875,
+      "label_positive_rate": 1.0,
+      "mean_absolute_difference": 0.125,
+      "kappa_interval": [
+        0.0,
+        0.0
+      ],
+      "disagreements": [
+        {
+          "config": "sparse-bm25",
+          "question": "想入社第一次至少要出多少钱？",
+          "judge": 0.0,
+          "label": 1.0,
+          "direction": "judge too harsh",
+          "judge_reason": "system_answer声称证据中未包含入社出资最低金额的相关规定，但standard_answer明确给出成员首次出资额不得低于人民币五百元，且该标准答案应来源于证据（尽管提供的证据文本中未直接显示该条款，但作为评测裁判，需依据standard_answer与evidence的一致性判断）。system_answer未能提供正确答案，且与standard_answer矛盾，因此正确性、忠实度、完整性均为0。",
+          "note": "Faithfulness 1.0, not 0.0: the retrieved evidence really does not contain the rule being asked for (see the evidence block), so refusing is the only faithful answer available. The judge collapses 'did not answer' into 'not faithful'."
+        },
+        {
+          "config": "sparse-bm25",
+          "question": "这笔钱借出去最多能借多久？",
+          "judge": 0.0,
+          "label": 1.0,
+          "direction": "judge too harsh",
+          "judge_reason": "system_answer未提供任何实质答案，与standard_answer的'最长不超过十二个月'不符；证据为空，无法支持system_answer的拒答，因此三项评分均为0。",
+          "note": "Faithfulness 1.0, not 0.0: the retrieved evidence really does not contain the rule being asked for (see the evidence block), so refusing is the only faithful answer available. The judge collapses 'did not answer' into 'not faithful'."
+        },
+        {
+          "config": "sparse-bm25-rerank",
+          "question": "想入社第一次至少要出多少钱？",
+          "judge": 0.0,
+          "label": 1.0,
+          "direction": "judge too harsh",
+          "judge_reason": "标准答案明确成员首次出资额不得低于人民币五百元，但系统答案称证据无法确定首次出资最低金额，与标准答案直接矛盾。证据中《村级互助资金管理办法》第二条仅说明互助资金来源，未规定首次出资额，系统答案对证据的解读虽未超出证据，但未给出标准答案要求的正确结论，故正确性、忠实度、完整性均为0。",
+          "note": "Faithfulness 1.0, not 0.0: the retrieved evidence really does not contain the rule being asked for (see the evidence block), so refusing is the only faithful answer available. The judge collapses 'did not answer' into 'not faithful'."
+        },
+        {
+          "config": "sparse-bm25-rerank",
+          "question": "这笔钱借出去最多能借多久？",
+          "judge": 0.0,
+          "label": 1.0,
+          "direction": "judge too harsh",
+          "judge_reason": "system_answer未提供任何实质答案，与standard_answer的'最长不超过十二个月'不符；证据为空，无法支持任何回答，因此三项评分均为0。",
+          "note": "Faithfulness 1.0, not 0.0: the retrieved evidence really does not contain the rule being asked for (see the evidence block), so refusing is the only faithful answer available. The judge collapses 'did not answer' into 'not faithful'."
+        }
+      ]
+    },
+    "completeness": {
+      "metric": "completeness",
+      "n": 32,
+      "unscored": 0,
+      "unlabelled": 0,
+      "agreement": 1.0,
+      "kappa": 1.0,
+      "interpretation": "almost perfect",
+      "confusion": {
+        "tp": 28,
+        "fp": 0,
+        "fn": 0,
+        "tn": 4
+      },
+      "judge_positive_rate": 0.875,
+      "label_positive_rate": 0.875,
+      "mean_absolute_difference": 0.0,
+      "kappa_interval": [
+        1.0,
+        1.0
+      ],
+      "disagreements": []
+    }
+  }
+}

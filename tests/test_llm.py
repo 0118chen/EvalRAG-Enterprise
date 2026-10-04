@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 import app.core.llm as llm_module
-from app.core.llm import LLMStreamError, MockLLM, OpenAICompatibleLLM
+from app.core.llm import LLMRequestError, LLMStreamError, MockLLM, OpenAICompatibleLLM
 
 
 async def _collect_stream(llm, question: str = "问题", context: str = "证据") -> list[str]:
@@ -168,3 +168,91 @@ def test_openai_stream_generator_aclose_closes_response_and_client(monkeypatch) 
     asyncio.run(consume_one_and_close())
 
     assert response_stream.closed is True
+
+
+def _install_transport(monkeypatch, handler) -> None:
+    transport = httpx.MockTransport(handler)
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        llm_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_async_client(transport=transport, **kwargs),
+    )
+
+
+def _answer_response() -> httpx.Response:
+    return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+
+def test_answer_retries_a_transport_error_and_still_succeeds(monkeypatch) -> None:
+    monkeypatch.setattr(llm_module, "LLM_BACKOFF_SECONDS", 0.0)
+    attempts: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request)
+        if len(attempts) < 3:
+            raise httpx.ConnectError("connection refused")
+        return _answer_response()
+
+    _install_transport(monkeypatch, handler)
+    llm = OpenAICompatibleLLM("https://llm.example/v1", "secret", "model")
+
+    assert asyncio.run(llm.answer("question", "context")) == "ok"
+    assert len(attempts) == 3
+
+
+def test_answer_gives_up_after_the_last_attempt_and_keeps_the_cause(monkeypatch) -> None:
+    monkeypatch.setattr(llm_module, "LLM_BACKOFF_SECONDS", 0.0)
+    attempts: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request)
+        raise httpx.ConnectError("connection refused")
+
+    _install_transport(monkeypatch, handler)
+    llm = OpenAICompatibleLLM("https://llm.example/v1", "secret", "model")
+
+    with pytest.raises(LLMRequestError) as excinfo:
+        asyncio.run(llm.answer("question", "context"))
+
+    assert isinstance(excinfo.value.__cause__, httpx.ConnectError)
+    assert len(attempts) == llm_module.LLM_MAX_ATTEMPTS
+
+
+def test_answer_honors_retry_after_on_a_retryable_status(monkeypatch) -> None:
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr(llm_module.asyncio, "sleep", fake_sleep)
+    attempts: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request)
+        if len(attempts) == 1:
+            return httpx.Response(429, headers={"Retry-After": "2"}, json={"error": "slow down"})
+        return _answer_response()
+
+    _install_transport(monkeypatch, handler)
+    llm = OpenAICompatibleLLM("https://llm.example/v1", "secret", "model")
+
+    assert asyncio.run(llm.answer("question", "context")) == "ok"
+    assert delays == [2.0]
+    assert len(attempts) == 2
+
+
+def test_answer_does_not_retry_a_client_error(monkeypatch) -> None:
+    attempts: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request)
+        return httpx.Response(400, json={"error": {"message": "bad request"}})
+
+    _install_transport(monkeypatch, handler)
+    llm = OpenAICompatibleLLM("https://llm.example/v1", "secret", "model")
+
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(llm.answer("question", "context"))
+
+    assert len(attempts) == 1

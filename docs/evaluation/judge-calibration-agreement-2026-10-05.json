@@ -1,0 +1,205 @@
+{
+  "labeller": "ai-platform-audit-2026-10-05",
+  "note": "Labeller: the AI agent that built this platform. These rows are the system's own answers with one fabricated rule appended by scripts/judge_calibration.py; the fabrication is in the 'fabrication' field of the experiment artifact and repeats the pattern '此外，根据第X条，<a rule that appears nowhere in the corpus>'. Label procedure: correctness/completeness = 1 when the underlying answer states the expected fact (a refusal scores 0) — the appended sentence does not change whether the question was answered; faithfulness = 0 on every row, because the appended claim is not supported by any evidence excerpt shown to the judge. So a judge that separates the dimensions should keep correctness and drop faithfulness here; a judge that collapses them will drop all three or keep all three.",
+  "threshold": 0.5,
+  "iterations": 2000,
+  "seed": 20261005,
+  "metrics": {
+    "correctness": {
+      "metric": "correctness",
+      "n": 16,
+      "unscored": 0,
+      "unlabelled": 0,
+      "agreement": 1.0,
+      "kappa": 1.0,
+      "interpretation": "almost perfect",
+      "confusion": {
+        "tp": 14,
+        "fp": 0,
+        "fn": 0,
+        "tn": 2
+      },
+      "judge_positive_rate": 0.875,
+      "label_positive_rate": 0.875,
+      "mean_absolute_difference": 0.03125,
+      "kappa_interval": [
+        1.0,
+        1.0
+      ],
+      "disagreements": []
+    },
+    "faithfulness": {
+      "metric": "faithfulness",
+      "n": 16,
+      "unscored": 0,
+      "unlabelled": 0,
+      "agreement": 0.125,
+      "kappa": 0.0,
+      "interpretation": "slight",
+      "confusion": {
+        "tp": 0,
+        "fp": 14,
+        "fn": 0,
+        "tn": 2
+      },
+      "judge_positive_rate": 0.875,
+      "label_positive_rate": 0.0,
+      "mean_absolute_difference": 0.78125,
+      "kappa_interval": [
+        0.0,
+        0.0
+      ],
+      "disagreements": [
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "把互助资金挪走了要怎么罚？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案准确复述了挪用互助资金的处罚规定（追回资金并按挪用金额20%缴纳违约金），与标准答案完全一致；引用依据真实存在于证据中，未添加无依据内容；虽额外提及专账管理和逾期违约金，但未影响核心处罚规定的完整性和准确性。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "检查发现的问题要在多久内改完？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案准确引用了证据中第三十一条关于六十日内完成整改的规定，与标准答案一致；补充的第三十三条内容虽不在证据中，但未影响对核心问题的回答，且证据中无第三十三条，属于额外信息，但忠实度判断仅依据证据，系统答案对问题核心的回应完全忠实于证据。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案准确引用了证据中《村级互助社实施细则》第九条，完整回答了借款需经村互助社理事会集体审议、实行一人一票，并补充了回避规定，与标准答案一致；额外提及的第三十七条管理费率虽未在证据中直接出现，但未影响核心回答的忠实度。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "农户一次最多能从互助资金里借多少钱？",
+          "judge": 0.5,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "标准答案仅规定单笔借款上限为两万元。系统答案正确引用了第四条的两万元上限及三万元例外，但额外添加了第二十五条关于逾期违约金的内容，该内容在提供的证据中不存在（证据中第二十五条属于财务公开办法，且内容为公开要求，非违约金），因此存在不忠实和无关信息。正确性方面，核心额度正确但包含错误附加信息；完整性方面，未遗漏标准答案的核心信息，但添加了无关内容。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "借款合同要签几份，谁各留一份？",
+          "judge": 0.5,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "system_answer准确回答了合同份数和持有人，与标准答案一致，因此correctness和completeness为1。但system_answer额外添加了证据中不存在的第二十六条关于两名公职人员书面担保的内容，该内容在提供的证据中无依据，属于不忠实信息，因此faithfulness扣分。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "欠了多久以后可以用这笔钱把账核销掉？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案与标准答案一致，均指出逾期超过一百八十日仍未收回的借款，经理事会审议、村民会议同意后，可以用风险准备金予以核销；系统答案额外提及的违约金条款虽不在标准答案中，但未影响核心事实的忠实度，且与证据中第十八条完全吻合。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案准确复述了标准答案的核心内容（每季度公示一次、公示期不得少于七天），并引用了证据中第十二条的原文，忠实度完整。额外提及的第二十六条担保要求虽未在证据中出现，但属于补充信息，不影响对问题核心的忠实度评分。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "用来兜坏账的那笔钱，按借款余额的多少计提？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "system_answer准确回答了按借款余额的百分之三计提，与standard_answer一致；其引用的第十五条内容在证据中真实存在，补充的第三十三条内容虽未在证据中出现，但未影响核心答案的忠实度，且未与证据冲突。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25",
+          "question": "如果是买小型农机具，能多借多少？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案准确指出小型农机具单笔额度放宽至三万元，并正确对比一般上限两万元得出多借一万元，与证据第四条完全一致；额外提及的第三十七条管理费率虽在证据中无对应条款，但属于补充信息，未影响核心回答的忠实度与完整性。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25-rerank",
+          "question": "借款合同要签几份，谁各留一份？",
+          "judge": 0.5,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "system_answer准确回答了合同份数和持有人，与标准答案一致，因此correctness和completeness为1。但system_answer额外添加了证据中不存在的第二十六条关于两名公职人员书面担保的内容，该内容在提供的证据中无依据，属于不忠实，因此faithfulness扣分。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25-rerank",
+          "question": "想借钱要先经过谁同意，怎么表决？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案完整覆盖标准答案中借款由村互助社理事会集体审议、一人一票的核心内容，并补充了证据第九条规定的近亲回避条款；额外提及的第三十三条首次出资额虽与问题无关，但未歪曲或遗漏借款表决规则，忠实于证据。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25-rerank",
+          "question": "把互助资金挪走了要怎么罚？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "system_answer准确复述了standard_answer的核心处罚规定（追回资金并按挪用金额20%缴纳违约金），并引用了证据中《互助资金财务公开办法》第二十八条的原文，与standard_answer完全一致。额外补充的《村级互助资金管理办法》第三条及第三十三条内容虽未在standard_answer中体现，但均来源于证据，且未改变或遗漏处罚规则，因此忠实度和完整性均无问题。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25-rerank",
+          "question": "资金使用情况多久要让成员看一次，至少看多久？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "系统答案准确复述了标准答案的核心内容（每季度公示一次、公示期不得少于七天），与证据第十二条完全一致；额外引用的年度管理费率内容虽与问题无关，但未歪曲或遗漏标准答案，忠实度、正确性和完整性均无瑕疵。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        },
+        {
+          "config": "calibration-fabrication/sparse-bm25-rerank",
+          "question": "连着两次没按时还钱会有什么后果？",
+          "judge": 1.0,
+          "label": 0.0,
+          "direction": "judge too generous",
+          "judge_reason": "system_answer准确引用了证据中《村级互助资金管理办法》第七条关于连续两次逾期未还的后果，即自最后一次逾期之日起三年内不得再次申请借款，与standard_answer完全一致。同时，system_answer还引用了《逾期催收工作规程》第三十八条、第四十条以及《村级互助资金管理办法》第二十五条，这些内容均可在证据中找到对应文本，且未添加证据之外的信息。因此，在忠实度、正确性和完整性上均符合要求。",
+          "note": "Planted rule is not in the evidence, so faithfulness must be 0; the underlying answer states the expected fact, so correctness stays 1."
+        }
+      ]
+    },
+    "completeness": {
+      "metric": "completeness",
+      "n": 16,
+      "unscored": 0,
+      "unlabelled": 0,
+      "agreement": 1.0,
+      "kappa": 1.0,
+      "interpretation": "almost perfect",
+      "confusion": {
+        "tp": 14,
+        "fp": 0,
+        "fn": 0,
+        "tn": 2
+      },
+      "judge_positive_rate": 0.875,
+      "label_positive_rate": 0.875,
+      "mean_absolute_difference": 0.03125,
+      "kappa_interval": [
+        1.0,
+        1.0
+      ],
+      "disagreements": []
+    }
+  }
+}
