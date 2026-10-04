@@ -15,9 +15,55 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
+      # The lockfile used to be decoration: nothing read it, so it could drift away from
+      # pyproject.toml unnoticed. Installing still goes through pip (the lock pins exact
+      # versions, the ranges above stay the contract), but drift now fails the build.
+      - uses: astral-sh/setup-uv@v5
+      - name: Lockfile matches pyproject.toml
+        run: uv lock --check
       - run: ruff check app tests alembic scripts
-      - run: pytest -q
+      - run: mypy
+      # The floor is 80% against 86.7% measured locally (stdlib `trace --count --missing`),
+      # so it fails on a real drop rather than on noise.
+      - run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
 
+  # 生产跑的是 PostgreSQL，但并发断言（"同一份文档只会被一个 worker 认领"）在
+  # 内存 SQLite 上无法验证。这个 job 用真的 PostgreSQL 服务容器跑迁移和并发测试：
+  # claim_document 的单条条件 UPDATE、replace_chunks 的原子替换、以及全部 Alembic 迁移
+  # 是否能在 PostgreSQL 上执行。测试通过 EVALRAG_TEST_DATABASE_URL 选库，未设置时本地跳过。
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: evalrag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/evalrag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Migrate the database
+        run: alembic upgrade head
+      - name: Migrations are reversible and rows are claimed exactly once on PostgreSQL
+        env:
+          EVALRAG_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/evalrag
+        run: pytest tests/test_migrations.py tests/test_concurrency.py -q
+
+  # 前端 job 不只做构建：SSE 分帧（后端按帧发 token，跨 chunk 的半个帧不能被吞掉）
+  # 与 API Key 存储（密钥曾长期留在 localStorage）这两处出问题，Python 测试里看不见。
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -32,6 +78,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
 
   # 检索质量门禁：单元测试只能证明"代码按预期跑"，证明不了"召回没有被改坏"。
   # 这里用一份提交进仓库的小夹具语料（8 份合成文档 / 16 题）跑真实链路，
