@@ -52,7 +52,7 @@ defineProps<{
           <p v-if="example.generated_answer">模型答案：{{ example.generated_answer }}</p>
           <div class="retrieved-list">
             <span
-              v-for="(item, itemIndex) in (example.retrieved as Array<Record<string, unknown>>)"
+              v-for="(item, itemIndex) in example.retrieved as Array<Record<string, unknown>>"
               :key="itemIndex"
               class="retrieved-item"
             >
@@ -60,7 +60,7 @@ defineProps<{
             </span>
           </div>
           <p class="metrics-inline">
-            <span v-for="(value, key) in (example.metrics as Record<string, number>)" :key="key">
+            <span v-for="(value, key) in example.metrics as Record<string, number>" :key="key">
               {{ key }} {{ Number(value).toFixed(3) }}
             </span>
           </p>

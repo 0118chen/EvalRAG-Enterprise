@@ -2,7 +2,9 @@
 import type { Citation, RetrievalDiagnostics, SearchPayload } from '../api'
 
 const question = defineModel<string>('question', { required: true })
-const retrievalMode = defineModel<SearchPayload['retrieval_mode']>('retrievalMode', { required: true })
+const retrievalMode = defineModel<SearchPayload['retrieval_mode']>('retrievalMode', {
+  required: true,
+})
 const topK = defineModel<number>('topK', { required: true })
 const queryVersion = defineModel<string>('queryVersion', { required: true })
 const rerank = defineModel<boolean>('rerank', { required: true })

@@ -30,7 +30,11 @@ const METRIC_LABELS: Record<string, string> = {
   timed_out_example_count: '超时样例',
 }
 
-const INTEGER_METRICS = new Set(['example_count', 'completed_example_count', 'timed_out_example_count'])
+const INTEGER_METRICS = new Set([
+  'example_count',
+  'completed_example_count',
+  'timed_out_example_count',
+])
 const MILLISECOND_METRICS = new Set(['latency_ms', 'latency_p50_ms', 'latency_p95_ms'])
 
 /** Numeric metrics of a finished job, in the order the API returned them. */

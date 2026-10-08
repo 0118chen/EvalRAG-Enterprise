@@ -1,25 +1,32 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   clearApiKey,
+  clearSessionToken,
   clearTenantId,
   getApiKey,
-  loadApiKey,
+  getSessionToken,
+  loadSessionToken,
   loadTenantId,
+  saveSessionToken,
   saveTenantId,
   setApiKey,
 } from './auth'
 
-// The API key used to live in localStorage forever, which means any XSS or any
-// later user of the machine could read it back. These tests pin the new rule:
-// localStorage is only ever read for the tenant id, and the legacy key is
-// deleted on sight rather than being migrated forward.
+// The long-lived API key used to live in localStorage forever, and even after it moved to
+// sessionStorage it was still a secret with no expiry and no way to revoke it. These tests
+// pin the rule that replaced it: the tab holds a server-side session token, never the key,
+// `localStorage` only ever carries the (non-secret) tenant id, and keys left behind by an
+// older build are deleted on sight rather than migrated forward.
 
+const TOKEN_KEY = 'evalrag_session_token'
 const LEGACY_KEY = 'evalrag_api_key'
+const LEGACY_SESSION_KEY = 'evalrag_api_key_session'
 
 describe('auth storage', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
+    clearSessionToken()
     clearApiKey()
   })
 
@@ -30,56 +37,63 @@ describe('auth storage', () => {
     expect(loadTenantId()).toBe('')
   })
 
-  it('deletes the legacy localStorage API key instead of adopting it', () => {
-    localStorage.setItem(LEGACY_KEY, 'legacy-key')
-    expect(loadApiKey()).toBe('')
-    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
-    expect(getApiKey()).toBe('')
-  })
-
-  it('never shadows a session key with the legacy localStorage key', () => {
-    sessionStorage.setItem('evalrag_api_key_session', 'fresh-key')
-    localStorage.setItem(LEGACY_KEY, 'legacy-key')
-    expect(loadApiKey()).toBe('fresh-key')
-    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
-  })
-
-  it('keeps a non-remembered key in memory only', () => {
-    setApiKey('  secret  ', { remember: false })
-    expect(getApiKey()).toBe('secret')
-    expect(loadApiKey()).toBe('')
-    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
-    expect(sessionStorage.getItem('evalrag_api_key_session')).toBeNull()
-  })
-
-  it('stores a remembered key in sessionStorage only', () => {
-    setApiKey('secret', { remember: true })
-    expect(loadApiKey()).toBe('secret')
-    expect(sessionStorage.getItem('evalrag_api_key_session')).toBe('secret')
-    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
+  it('stores a remembered token in sessionStorage and nothing in localStorage', () => {
+    saveSessionToken('ers_abc', { remember: true })
+    expect(getSessionToken()).toBe('ers_abc')
+    expect(loadSessionToken()).toBe('ers_abc')
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('ers_abc')
     expect(Object.keys(localStorage)).toEqual([])
   })
 
+  it('keeps an unremembered token in memory only', () => {
+    saveSessionToken('  ers_abc  ', { remember: false })
+    expect(getSessionToken()).toBe('ers_abc')
+    expect(loadSessionToken()).toBe('')
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(Object.keys(sessionStorage)).toEqual([])
+  })
+
+  it('deletes the legacy API keys instead of adopting them', () => {
+    localStorage.setItem(LEGACY_KEY, 'legacy-key')
+    sessionStorage.setItem(LEGACY_SESSION_KEY, 'legacy-key')
+    expect(loadSessionToken()).toBe('')
+    expect(getSessionToken()).toBe('')
+    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
+    expect(sessionStorage.getItem(LEGACY_SESSION_KEY)).toBeNull()
+  })
+
+  it('drops the legacy keys even when a live token is present', () => {
+    saveSessionToken('ers_abc', { remember: true })
+    localStorage.setItem(LEGACY_KEY, 'legacy-key')
+    sessionStorage.setItem(LEGACY_SESSION_KEY, 'legacy-key')
+    expect(loadSessionToken()).toBe('ers_abc')
+    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
+    expect(sessionStorage.getItem(LEGACY_SESSION_KEY)).toBeNull()
+    expect(Object.keys(localStorage)).toEqual([])
+    expect(Object.keys(sessionStorage)).toEqual([TOKEN_KEY])
+  })
+
   it('clears storage and memory together', () => {
-    setApiKey('secret', { remember: true })
+    saveSessionToken('ers_abc', { remember: true })
+    clearSessionToken()
+    expect(getSessionToken()).toBe('')
+    expect(loadSessionToken()).toBe('')
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+  })
+
+  it('treats a blank token as no token', () => {
+    saveSessionToken('   ', { remember: true })
+    expect(getSessionToken()).toBe('')
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+  })
+
+  it('keeps the API key in memory without persisting it anywhere', () => {
+    setApiKey('  secret  ')
+    expect(getApiKey()).toBe('secret')
+    expect(Object.keys(localStorage)).toEqual([])
+    expect(Object.keys(sessionStorage)).toEqual([])
     clearApiKey()
     expect(getApiKey()).toBe('')
-    expect(loadApiKey()).toBe('')
-    expect(sessionStorage.getItem('evalrag_api_key_session')).toBeNull()
-    expect(localStorage.getItem(LEGACY_KEY)).toBeNull()
-  })
-
-  it('clears a previously remembered key when logging in without remember', () => {
-    setApiKey('old', { remember: true })
-    setApiKey('new', { remember: false })
-    expect(getApiKey()).toBe('new')
-    expect(sessionStorage.getItem('evalrag_api_key_session')).toBeNull()
-  })
-
-  it('treats a blank key as no key', () => {
-    setApiKey('   ', { remember: true })
-    expect(getApiKey()).toBe('')
-    expect(sessionStorage.getItem('evalrag_api_key_session')).toBeNull()
   })
 
   it('survives storage that throws (private mode)', () => {
@@ -91,9 +105,10 @@ describe('auth storage', () => {
       },
     })
     try {
-      expect(loadApiKey()).toBe('')
-      expect(() => setApiKey('secret', { remember: true })).not.toThrow()
-      expect(getApiKey()).toBe('secret')
+      expect(loadSessionToken()).toBe('')
+      expect(() => saveSessionToken('ers_abc', { remember: true })).not.toThrow()
+      expect(getSessionToken()).toBe('ers_abc')
+      expect(() => clearSessionToken()).not.toThrow()
     } finally {
       Object.defineProperty(window, 'sessionStorage', { configurable: true, value: original })
     }

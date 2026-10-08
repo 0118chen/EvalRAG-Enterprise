@@ -2,7 +2,9 @@
 import type { EvaluationDataset, EvaluationJob, SearchPayload } from '../api'
 
 const selectedDataset = defineModel<string>('selectedDataset', { required: true })
-const retrievalMode = defineModel<SearchPayload['retrieval_mode']>('retrievalMode', { required: true })
+const retrievalMode = defineModel<SearchPayload['retrieval_mode']>('retrievalMode', {
+  required: true,
+})
 const topK = defineModel<number>('topK', { required: true })
 const queryVersion = defineModel<string>('queryVersion', { required: true })
 const baselineEvaluationId = defineModel<string>('baselineEvaluationId', { required: true })

@@ -1,0 +1,10 @@
+# Build output, installed packages and the shared npm cache are not source.
+dist/
+node_modules/
+_npmcache/
+
+# The lockfile and the container/config files are generated or belong to
+# another toolchain, so Prettier must not reformat them.
+package-lock.json
+Dockerfile
+nginx.conf

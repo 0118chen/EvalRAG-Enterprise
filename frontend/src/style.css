@@ -1,5 +1,5 @@
 :root {
-  font-family: Inter, "Microsoft YaHei", sans-serif;
+  font-family: Inter, 'Microsoft YaHei', sans-serif;
   color: #172026;
   background: #f3f5f4;
   font-synthesis: none;
@@ -413,7 +413,7 @@ progress {
   width: 124px;
 }
 
-.retrieval-controls input[type="number"] {
+.retrieval-controls input[type='number'] {
   width: 68px;
 }
 
@@ -753,7 +753,7 @@ progress {
   }
 
   .retrieval-controls select,
-  .retrieval-controls input[type="number"],
+  .retrieval-controls input[type='number'],
   .version-input {
     width: 100%;
   }

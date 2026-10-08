@@ -1,4 +1,4 @@
-import { getApiKey } from './auth'
+import { getApiKey, getSessionToken } from './auth'
 import { SSE_DONE, SseDecoder } from './sse'
 
 export type KnowledgeBase = {
@@ -97,6 +97,29 @@ export type EvaluationJob = {
   completed_at?: string
 }
 
+/** The short-lived bearer token handed out by `POST /api/v1/auth/session`. */
+export type SessionToken = {
+  token: string
+  token_type: string
+  tenant_id: string
+  expires_at: string
+  expires_in: number
+  /** False when the deployment runs with AUTH_ENABLED off: a session, but unproven. */
+  authenticated: boolean
+}
+
+/** A session as an operator sees it: lifecycle and identity, never the secret. */
+export type SessionInfo = {
+  id: string
+  tenant_id: string
+  key_fingerprint: string
+  created_at: string | null
+  expires_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+  current: boolean
+}
+
 export type StreamHandlers = {
   onText: (text: string) => void
   onCitations: (items: Citation[]) => void
@@ -108,8 +131,15 @@ export type StreamHandlers = {
 
 function requestHeaders(json = false): HeadersInit {
   const headers: Record<string, string> = {}
-  const apiKey = getApiKey()
-  if (apiKey) headers['X-API-Key'] = apiKey
+  const token = getSessionToken()
+  if (token) {
+    // Everything after the exchange authenticates with the session token, so a leaked
+    // request log never contains the long-lived key.
+    headers['Authorization'] = `Bearer ${token}`
+  } else {
+    const apiKey = getApiKey()
+    if (apiKey) headers['X-API-Key'] = apiKey
+  }
   if (json) headers['Content-Type'] = 'application/json'
   return headers
 }
@@ -123,6 +153,40 @@ async function checked(response: Response): Promise<Response> {
 }
 
 export const api = {
+  /**
+   * Trade the long-lived API key for a short-lived session token.
+   *
+   * This is the one call that carries `X-API-Key`; every protected call after it uses
+   * `Authorization: Bearer <token>`. The tenant is optional because with AUTH_ENABLED on
+   * the server reads it from the key and rejects a mismatch with a 403.
+   */
+  async createSession(payload: { apiKey?: string; tenantId?: string } = {}): Promise<SessionToken> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const apiKey = (payload.apiKey || getApiKey()).trim()
+    if (apiKey) headers['X-API-Key'] = apiKey
+    const response = await fetch('/api/v1/auth/session', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload.tenantId ? { tenant_id: payload.tenantId } : {}),
+    })
+    return (await checked(response)).json()
+  },
+
+  /** Describe the session behind the stored token; 401 once it expired or was revoked. */
+  async getSession(): Promise<SessionInfo> {
+    const response = await fetch('/api/v1/auth/session', { headers: requestHeaders() })
+    return (await checked(response)).json()
+  },
+
+  /** Revoke the session behind the stored token: logging out ends the credential. */
+  async revokeSession(): Promise<void> {
+    const response = await fetch('/api/v1/auth/session', {
+      method: 'DELETE',
+      headers: requestHeaders(),
+    })
+    await checked(response)
+  },
+
   async listKnowledgeBases(tenantId: string): Promise<KnowledgeBase[]> {
     const response = await fetch(
       `/api/v1/knowledge-bases?tenant_id=${encodeURIComponent(tenantId)}`,
@@ -147,10 +211,7 @@ export const api = {
     return (await checked(response)).json()
   },
 
-  async listDocuments(
-    tenantId: string,
-    knowledgeBaseId: string,
-  ): Promise<DocumentRecord[]> {
+  async listDocuments(tenantId: string, knowledgeBaseId: string): Promise<DocumentRecord[]> {
     const response = await fetch(
       `/api/v1/knowledge-bases/${knowledgeBaseId}/documents?tenant_id=${encodeURIComponent(tenantId)}`,
       { headers: requestHeaders() },
@@ -229,12 +290,7 @@ export const api = {
     }
   },
 
-  async feedback(
-    tenantId: string,
-    traceId: string,
-    feedback: string,
-    comment = '',
-  ): Promise<void> {
+  async feedback(tenantId: string, traceId: string, feedback: string, comment = ''): Promise<void> {
     const response = await fetch('/api/v1/feedback', {
       method: 'POST',
       headers: requestHeaders(true),
@@ -273,10 +329,9 @@ export const api = {
   },
 
   async listEvaluations(tenantId: string): Promise<EvaluationJob[]> {
-    const response = await fetch(
-      `/api/v1/evaluations?tenant_id=${encodeURIComponent(tenantId)}`,
-      { headers: requestHeaders() },
-    )
+    const response = await fetch(`/api/v1/evaluations?tenant_id=${encodeURIComponent(tenantId)}`, {
+      headers: requestHeaders(),
+    })
     return (await checked(response)).json()
   },
 

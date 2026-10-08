@@ -10,7 +10,17 @@ import {
   type RetrievalDiagnostics,
   type SearchPayload,
 } from './api'
-import { clearApiKey, clearTenantId, loadApiKey, loadTenantId, saveTenantId, setApiKey } from './auth'
+import {
+  clearApiKey,
+  clearSessionToken,
+  clearTenantId,
+  getSessionToken,
+  loadSessionToken,
+  loadTenantId,
+  saveSessionToken,
+  saveTenantId,
+  setApiKey,
+} from './auth'
 import ChatPanel from './components/ChatPanel.vue'
 import DocumentPanel from './components/DocumentPanel.vue'
 import EvaluationDatasetPanel from './components/EvaluationDatasetPanel.vue'
@@ -25,8 +35,11 @@ type View = 'workspace' | 'evaluation'
 
 const activeView = ref<View>('workspace')
 const tenantId = ref(loadTenantId())
-const apiKey = ref(loadApiKey())
-const rememberApiKey = ref(false)
+// The token, not the key, is what keeps this tab signed in; the key only exists in the
+// input until the exchange succeeds.
+const sessionToken = ref(loadSessionToken())
+const apiKey = ref('')
+const rememberSession = ref(true)
 const loginName = ref(tenantId.value || 'demo-enterprise')
 const busy = ref(false)
 const loading = ref(false)
@@ -66,7 +79,9 @@ const baselineEvaluationId = ref('')
 const experimentName = ref('')
 const comparison = ref<Record<string, number>>({})
 
-const loggedIn = computed(() => Boolean(tenantId.value))
+// A remembered tenant is not a session: the workspace only opens once this tab holds a
+// token the server has actually minted (and, on mount, confirmed is still alive).
+const loggedIn = computed(() => Boolean(tenantId.value && sessionToken.value))
 const activeKnowledgeBase = computed(
   () => knowledgeBases.value.find((item) => item.id === selectedKb.value) || null,
 )
@@ -85,20 +100,82 @@ function setNotice(value: string) {
 }
 
 function logout() {
+  // Best effort: the token is revoked server-side so logging out ends the credential
+  // rather than just forgetting it, but an unreachable server must not trap the operator
+  // inside the workspace.
+  api.revokeSession().catch(() => undefined)
+  forgetCredentials()
   tenantId.value = ''
   clearTenantId()
-  clearApiKey()
+  clearWorkspace()
+}
+
+/** Drop every local trace of the session: memory, tab storage and the in-memory key. */
+function forgetCredentials() {
+  sessionToken.value = ''
+  clearSessionToken()
   apiKey.value = ''
+  clearApiKey()
+}
+
+function clearWorkspace() {
+  knowledgeBases.value = []
+  selectedKb.value = ''
+  documents.value = []
+  datasets.value = []
+  selectedDataset.value = ''
+  evaluations.value = []
+  selectedEvaluation.value = null
+  comparison.value = {}
+  answer.value = ''
+  citations.value = []
+  retrieval.value = null
+  traceId.value = ''
 }
 
 async function login() {
   const tenant = loginName.value.trim()
   if (!tenant) return
-  tenantId.value = tenant
-  saveTenantId(tenant)
-  setApiKey(apiKey.value, { remember: rememberApiKey.value })
-  apiKey.value = loadApiKey()
-  await loadAll()
+  busy.value = true
+  error.value = ''
+  try {
+    const session = await api.createSession({ apiKey: apiKey.value.trim(), tenantId: tenant })
+    setApiKey(apiKey.value)
+    apiKey.value = ''
+    saveSessionToken(session.token, { remember: rememberSession.value })
+    sessionToken.value = getSessionToken()
+    tenantId.value = session.tenant_id || tenant
+    saveTenantId(tenantId.value)
+    await loadAll()
+  } catch (reason) {
+    // Nothing is stored on a refused exchange: no token, and no tenant either, so a
+    // typo cannot leave the shell pointing at a tenant this tab cannot authenticate as.
+    setError(reason)
+  } finally {
+    busy.value = false
+  }
+}
+
+/**
+ * Confirm the token loaded from this tab is still live before opening the workspace.
+ *
+ * A token can be expired or revoked while the tab is closed, and every request behind the
+ * shell would then fail with 401; checking once turns that into the login form.
+ */
+async function validateSession() {
+  try {
+    const session = await api.getSession()
+    if (session?.tenant_id) {
+      tenantId.value = session.tenant_id
+      saveTenantId(session.tenant_id)
+    }
+    await loadAll()
+  } catch {
+    forgetCredentials()
+    tenantId.value = ''
+    clearTenantId()
+    setError('登录状态已失效，请重新登录')
+  }
 }
 
 async function loadAll() {
@@ -178,7 +255,12 @@ async function pollDocument(id: string) {
     const document = await api.document(tenantId.value, id)
     const index = documents.value.findIndex((item) => item.id === id)
     if (index >= 0) documents.value[index] = document
-    if (document.status === 'ready' || document.status === 'failed' || document.status === 'needs_ocr') return
+    if (
+      document.status === 'ready' ||
+      document.status === 'failed' ||
+      document.status === 'needs_ocr'
+    )
+      return
     await new Promise((resolve) => setTimeout(resolve, 1000))
   }
 }
@@ -249,12 +331,7 @@ async function ask() {
 async function sendFeedback(value: string) {
   if (!traceId.value) return
   try {
-    await api.feedback(
-      tenantId.value,
-      traceId.value,
-      value,
-      feedbackComment.value.trim(),
-    )
+    await api.feedback(tenantId.value, traceId.value, value, feedbackComment.value.trim())
     feedbackSent.value = true
     setNotice('反馈已记录')
   } catch (reason) {
@@ -382,7 +459,7 @@ async function loadComparison(id: string) {
 }
 
 onMounted(() => {
-  if (loggedIn.value) loadAll()
+  if (loggedIn.value) validateSession()
 })
 </script>
 
@@ -391,7 +468,7 @@ onMounted(() => {
     <section class="login-panel">
       <p class="eyebrow">EvalRAG Enterprise</p>
       <h1>企业知识检索与评测工作台</h1>
-      <p class="muted">使用租户标识和可选 API Key 进入工作区。</p>
+      <p class="muted">使用租户标识登录；API Key 只用于兑换本标签页的短期会话令牌。</p>
       <label>
         <span>租户标识</span>
         <input v-model="loginName" placeholder="demo-enterprise" @keyup.enter="login" />
@@ -401,8 +478,8 @@ onMounted(() => {
         <input v-model="apiKey" type="password" placeholder="生产环境必填" @keyup.enter="login" />
       </label>
       <label class="toggle">
-        <input v-model="rememberApiKey" type="checkbox" />
-        在本标签页内记住密钥
+        <input v-model="rememberSession" type="checkbox" />
+        在本标签页内保持登录（仅存短期令牌）
       </label>
       <p v-if="error" class="alert error">{{ error }}</p>
       <button class="primary wide" @click="login">进入工作台</button>
@@ -420,7 +497,10 @@ onMounted(() => {
           <button :class="{ active: activeView === 'workspace' }" @click="activeView = 'workspace'">
             知识工作台
           </button>
-          <button :class="{ active: activeView === 'evaluation' }" @click="activeView = 'evaluation'">
+          <button
+            :class="{ active: activeView === 'evaluation' }"
+            @click="activeView = 'evaluation'"
+          >
             评测实验
           </button>
         </nav>

@@ -63,8 +63,12 @@ function onFile(event: Event) {
                 {{ document.error_message }}
               </small>
             </td>
-            <td><span class="tag">{{ document.version }}</span></td>
-            <td><span class="status" :class="document.status">{{ document.status }}</span></td>
+            <td>
+              <span class="tag">{{ document.version }}</span>
+            </td>
+            <td>
+              <span class="status" :class="document.status">{{ document.status }}</span>
+            </td>
             <td>{{ document.chunks }}</td>
             <td>
               <progress :value="document.progress" max="100" />
