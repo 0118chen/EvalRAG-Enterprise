@@ -485,3 +485,89 @@ cd frontend && npx vue-tsc --noEmit           → exit 0（构建产物在 CI �
 
 8 个 skip = 6 个 postgres 参数（本机无 PostgreSQL，CI 真跑）+ 1 个需要可写临时目录的 OCR 用例
 + 1 个需要可写临时目录的迁移用例，全部是环境限制而非代码跳过。
+
+> 本节的 332/8 是**第 1 梯队收尾时（2026-10-05）**的快照；第 2 梯队 6 项完成后已变为
+> `pytest → 451 passed, 9 skipped`，最新快照见 §8。
+
+## 8. 第 2 梯队执行结果（2026-10-07 完成）
+
+逐项的根因、设计取舍、新增测试与仍存在的限制记录在
+[`priority-fixes.md`](priority-fixes.md) 的事项三十六至四十一，这里只给结论与证据。
+
+这一梯队原本标注为"可选，增强系统设计叙事"，实际六项都落在"出问题时才被发现"的位置上：
+outbox 与 advisory lock 只在崩溃/并发下生效，库级约束只在有人绕过 ORM 写脏数据时生效，
+可观测性只在排障时生效，对象存储只在多副本部署时生效，CI 门禁只在发布时生效。
+所以下面的证据以"这个场景是怎么被写成测试的"为主；没有实测性能数字可报，
+**#20 的工作流改动从未执行过**（需要 GitHub Actions；本机连 `docker compose up` 都没跑过），表格里已如实标注。
+
+| # | 项目 | 状态 | 关键证据 |
+|---|---|---|---|
+| 15 | 外部索引 outbox + 可重放 | ✅ | `index_outbox` 表（`app/db/models.py:192` 的 `IndexJobRecord`）**刻意无外键**（行要活过文档/知识库删除，否则级联会抹掉"外部索引还需清理"这唯一证据）；摄取提交点 `app/core/store.py:358-373` 的 `save_document_index` 在**同一事务**里写 chunks + `_upsert_index_job(..., "upsert")`；重试预算在**行上**而非 broker 上——`INDEX_JOB_MAX_ATTEMPTS = 3`（`app/core/store.py:456-459`）、`fail_index_job`（:551-572）累加 `attempts` 到上限置 `failed`，`app/tasks.py:366-369` 注释 "No autoretry: the row itself carries the retry budget"；`claim_index_job`（:472-535）用 `with_for_update(skip_locked=True)` 认领、`rowcount != 1` 即 rollback，`stale_after_seconds=900` 允许回收死 worker 的行；`_replay_index_outbox`（`app/tasks.py:290-318`）驱动所有到期行并返回 `{"replayed", "failed"}`，一个坏文档不中断整轮 sweep；错误截断到 `last_error = (error or "")[:2000] or None`；删除路径 `delete_document`（:390-406）删行后补 `operation="delete"` intent，`delete_knowledge_base`（:232-267）`rowcount != 1` 则 rollback 且**不留 intent**；迁移 `alembic/versions/0012_index_outbox.py`（`down_revision = "0011_postgres_constraints"`）upgrade/downgrade 都先查 `get_table_names()` 故可重复执行；新增 `tests/test_index_outbox.py` **19 项**（同一事务提交 intent、只有一个 worker 领到、陈旧行可回收、新鲜行不提前 sweep、预算耗尽变成可见失败、delete intent、拒绝的删除不留 intent、回放发布 PG 的 chunk、回放清索引、坏文档不阻塞 sweep），`tests/test_tasks.py` 里 `test_external_index_failure_keeps_document_failed_and_db_unchanged` 被改写为 **`test_external_index_failure_leaves_a_replayable_row_behind`** 并新增 `test_a_parked_index_row_marks_the_document_failed` |
+| 16 | Enum/CheckConstraint + PG JSONB + FK 级联 | ✅ | 模型是唯一事实来源：`app/db/models.py:51-53` 的 `_status_check(column, allowed)` 生成 `f"{column} IN ('a', 'b')"`，`documents`/`evaluations` 各带 `ck_documents_status` / `ck_evaluations_status`；`JSON_DOCUMENT = JSON().with_variant(JSONB(), "postgresql")`（:45-48）让 PG 落 JSONB、其它方言落泛型 JSON，**一套代码路径**；级联按归属分两类——内容随语料死（`documents.knowledge_base_id`、`chunks.document_id`/`chunks.knowledge_base_id`、`evaluation_datasets.knowledge_base_id`、`evaluation_examples.dataset_id` 全 `CASCADE`），评测历史活过被它测过的语料（`evaluations.knowledge_base_id`/`dataset_id` 用 `SET NULL` + `nullable=True`，:157-161）；SQLite 侧两个开关缺一不可——`json_serializer=lambda value: json.dumps(value, ensure_ascii=False)`（`app/core/store.py:74-83`，否则中文被转义存储、库不可读）+ 每连接 `PRAGMA foreign_keys=ON`（:89-104，SQLite **默认关闭**外键，不开则级联与 CHECK 静默失效）；迁移不重述逻辑而是从模型读出来：新增 `app/db/postgres_schema.py` 的 `desired_check_constraints()` / `jsonb_columns()` / `desired_foreign_keys()` 与 `upgrade_statements(inspector)` / `downgrade_statements(inspector)` 纯函数，`alembic/versions/0011_postgres_constraints.py` 只在 PostgreSQL 方言上执行它们（`bind.dialect.name != postgres_schema.PG_DIALECT` 返回 `[]`）；两个必须显式处理的坑——`index_outbox` 由 `0012` 才建出，所以 `upgrade/downgrade_statements` 用 `_existing_tables(inspector)` 过滤不存在的表（否则全新库的 `alembic upgrade head` 会在 `0011` 就给不存在的表加约束），JSONB 转换用 `USING NULLIF(col, '')::jsonb` 让空串历史行不中断迁移；新增 `tests/test_schema_constraints.py` **13 项**（`get_args(DocumentStatus) == DOCUMENT_STATUSES` 的 API/库集合守护、库里拒收未声明状态、每个声明状态都被接受、删知识库带走 documents/chunks/datasets 而 evaluations 的 `knowledge_base_id`/`dataset_id` 变 `None` 且 dataset_name 保留、跨租户删除被拒、`assert "全对" in str(raw)` 证明 JSON 未被转义）+ `tests/test_postgres_schema.py` **14 项**（四个 CHECK 名与条件逐字、三个 JSONB 列、CASCADE/SET NULL 两个集合、约束名与 legacy 名都稳定、upgrade 幂等、只动自己拥有的表、downgrade 还原 0010 形状且不含 `ON DELETE`、不容 `index_outbox`） |
+| 17 | Prometheus 指标 + readiness 深检查 | ✅ | 手写 Prometheus 文本格式而不引入 `prometheus_client`：`app/core/metrics.py:74` 的 `_Histogram` + :127 的 `Metrics`，渲染出 `evalrag_http_requests_total{path,status}` / `evalrag_http_errors_total{path}` / `evalrag_http_request_duration_seconds_{bucket,sum,count}` / `evalrag_cache_{hits,misses,errors}_total{backend}`（`cache_backend_name` 从实例读 backend 标签，:97）/ `evalrag_retrieval_stage_duration_seconds_{bucket,sum,count}{stage}` / `evalrag_celery_tasks_{started,succeeded,failed}_total{task}` / `evalrag_db_pool_{size,checked_out,idle,overflow,max_overflow}{pool}` / `evalrag_external_backend_up{backend}`；采集点在操作边界——通道各记自己的时间、hybrid 只记合并段，DB pool 读不到 accessor 就**不发布样本**而不抛异常（保证 scrape 永远渲染得出来）；readiness（`app/api/routes/health.py`）按**启用配置**分支：`_check_redis`（:28）`asyncio.wait_for(client.ping(), timeout=_timeout(settings))`、`_check_database`（:53）、`_inspect_queue`（:62）同步 broker 探针经 `asyncio.to_thread`（无人应答 → `"no Celery worker answered the ping"`）、`_check_backends`（:99）把探测失败本身当健康信号，未启用的后端返回 `"skipped"` 而不是假装 OK；`GET /metrics`（:254）是 `PlainTextResponse` 且 `include_in_schema=False`；新增 `tests/test_observability_metrics.py` **25 项**（过期算 miss 不算 hit、redis 故障记 error 而不是 miss、无 metrics 的 cache 零开销、local/hybrid/retrieval_service 各阶段计数、`evalrag_db_pool_size{pool="default"} 5` 与 `max_overflow 3`、无 accessor 不抛异常、`/metrics` 同时出 pool 与 http 序列、gauge 0/1；readiness 侧 `ready` 时四个未启用依赖全是 `"skipped"`、无 worker 时 `degraded` 且错误含 "no Celery worker"、redis ping 失败含 "connection refused"、启用但探测失败 → 503 且 gauge 变 0、数据库不可达 → 503） |
+| 18 | 上传落对象存储 + 预签名 URL | ✅ | 新增 `app/core/storage.py`：`ObjectStore` 协议（put/get/delete/presign_get）+ `LocalObjectStore`（默认）与 `S3ObjectStore`，`create_object_store(settings)` 只在 `OBJECT_STORE` 归一化等于 `"s3"` 时切 S3（写错一个字母退回本地而不是崩）；key 由 id+文件名推导、不改 schema——`document_key("doc-1","policy.txt") == "documents/doc-1/policy.txt"`，`_safe_name` 把非 `alnum/._-` 换成 `_`，于是 `../../etc/passwd` 落成 `documents/doc-1/.._.._etc_passwd`；本地写 `.part` 再 `temporary.replace(target)`（半截文件不以目标名出现）、越界 key 显式报 `object key escapes the store root`、`presign_get` 抛 `PresignUnsupported`；`download_document`（`app/api/routes/documents.py:195-232`）在 S3 上 307 重定向到预签名 URL、在本地读回字节返回，`Content-Disposition` 用 `f"attachment; filename*=UTF-8''{quote(filename)}"`（中文名直接拼会破坏响应头）；S3 实现支持第二个可选 client 给"签名 Host 与内部 endpoint 不同"的公开端点（否则预签名 URL 里是浏览器解析不了的 `http://minio:9000`），`get` 在 `finally` 里 `body.close()`；删除路径刻意 fail-soft（`delete_document`，:168-192）——行已删则对象残留只 warning 不失败，注释理由是"行已经没了，这正是请求承诺的"；上传路径相反是 fail-fast（存储抛错 → 503 "document could not be stored"，排队失败 → 置 failed + `_remove_upload` + 503）；`docker-compose.yml` 加 `minio` + 一次性 `createbuckets`（`mc mb --ignore-existing`）服务，api/worker 注入 `OBJECT_STORE: s3` / `S3_ENDPOINT_URL: http://minio:9000` / `S3_PUBLIC_ENDPOINT_URL: http://localhost:${MINIO_PORT:-9000}` 并删掉两处 `uploads_data` 挂载、卷换成 `minio_data`；`deploy/docker-compose.staging.yml` 与 `deploy/docker-compose.production.yml` 同样自带 `minio` + `createbuckets`，且把 `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` / `S3_PUBLIC_ENDPOINT_URL` 写成 `${VAR:?set ...}`——**不设置就拒绝启动**，理由是"悄悄用默认口令的生产栈比起不来更糟"（文件内注释原文）；新增 `tests/test_storage.py` **19 项**（key 推导含中文名、文件名逃不出前缀、空文件名仍可用、本地 round-trip 且不留 `.part`、覆盖写、缺失对象、delete 幂等、拒绝越界 key、本地不能发 URL、默认后端且拼错不改、只用 S3 时才建 S3、公开端点独立签名 client、put/get/delete/presign 的调用参数、缺 key 映射成 `ObjectMissing` 而真故障原样抛、文件名编码 `%E5%80%9F`）+ `tests/test_upload_streaming.py` 新增 6 项（按推导 key 存储并排队、文件名走不出 store root、存储拒绝写时 503、content 路由返回字节、content 路由 307 重定向、缺失对象） |
+| 19 | Alembic advisory lock | ✅ | 新增 `app/db/migration_lock.py`：PG 用**独立连接**上的 session 级 advisory lock（注释理由：commit/rollback 不能提前释放，也不会漏进应用连接池），`MIGRATION_LOCK_KEY = 5_710_214_013_041_212`、`LOCK_ENV_VAR = "EVALRAG_MIGRATION_LOCK"`、`_DISABLED_VALUES = frozenset({"0","false","no","off"})`（**未设置=开启**，安全默认）、`lock_enabled(env=None)` 与 `@contextmanager migration_lock(engine)`；接进 Alembic 只改一行结构：`alembic/env.py` 的 `with connectable.connect() as connection:` → `with migration_lock(connectable), connectable.connect() as connection:`；非 PG 或显式关闭时 yield `False` 且**完全不建立连接**，SQLite 上 `alembic upgrade head` 行为逐字不变；新增 `tests/test_migration_lock.py` **9 项**，其中 `test_env_module_wires_the_lock_around_the_migration_run` **读 `alembic/env.py` 源码**断言 `from app.db.migration_lock import migration_lock` 与 `migration_lock(connectable)` 都在（防"helper 写好了但没接上"），`test_non_postgres_dialects_do_not_connect_at_all` 断言临时库文件根本没被创建、`test_disabled_lock_does_not_connect_to_postgres` 断言 `engine.connects == 0`，真并发一条 `test_a_second_migrator_waits_for_the_advisory_lock` 需 `EVALRAG_TEST_DATABASE_URL`（无则 skip，本机即为此 skip，也是全量 skip 从 8 变 **9** 的来源）；`0011`/`0012` 的 downgrade 都已实现且幂等，逐版本 downgrade 还原由 `tests/test_migrations.py::test_every_downgrade_restores_the_previous_schema` 守着（`0003` 的 downgrade 补齐是第 1 梯队 #8 的成果，本轮未改该文件） |
+| 20 | CI 与 release 门禁 | ⚠️ 已实现，未在本地验证 | 三个门禁的定义抽成**可复用工作流** `gate-backend.yml` / `gate-frontend.yml` / `gate-eval.yml`（都 `on: workflow_call`），`ci.yml` 与 `release.yml` 共用同一份步骤（`gate-backend.yml:1-4` 注释：`needs` **不能跨工作流文件**引用 job，所以"发布要等门禁通过"只能靠复用同一份定义，而不是把步骤复制过去）；`release.yml` 因此把 `backend`/`frontend`/`eval-gate` 三个 job 用 `uses: ./.github/workflows/gate-*.yml` **真实建出来**，`images` job 才写得出 `needs: [backend, frontend, eval-gate]`——打 tag 不再等于自动发布；backend 门禁：`uv sync --frozen --extra dev` → `uv lock --check` → `uv run --frozen ruff check app tests alembic scripts` → `uv run --frozen mypy` → `uv run --frozen pytest -q --cov=app --cov-fail-under=80`（下限 80% 取自本地实测 86.7% 留的余量）；frontend 门禁：`npm ci` → `npm run lint` → `npm run format:check` → `npm run build` → `npm test`；eval 门禁：8 份合成文档 / 16 题的夹具语料跑真实链路后用 `scripts.check_eval_regression --tolerance 1e-6` 逐项比对基线（**不比延迟**，失败时上传 `/tmp/eval-gate.json`）；`ci.yml` 另外把 `postgres` job 从 `pip install -e ".[dev]"` 改为 `uv sync --frozen`（`uv.lock` 从装饰品变成事实来源，锁文件过期直接失败），新增 `docker-build` job（两镜像、`type=gha,scope=${{ matrix.image }},mode=max` 缓存、`push: false`）与 `audit` job（`uv export --frozen ... --no-emit-project` + `uvx pip-audit --no-deps`，用 `uvx` 临时拉起故不进生产依赖树）；**注意**：本机没有执行过任何工作流，GitHub 解析与 CI 绿灯都未验证，`docker-build` 只构建不推送、`audit --no-deps` 不覆盖传递依赖与镜像 OS 包 |
+
+**本轮核实快照**（下面两条数字已在仓库内实际运行得出；本次文档任务未重跑它们，
+也未重跑其他命令——其余未跑过的集中在末尾"未核实项"里）：
+
+```
+pytest                                        → 451 passed, 9 skipped
+pytest tests/test_storage.py tests/test_upload_streaming.py tests/test_tasks.py
+                                              → 52 passed（对象存储 + outbox 回放的专项口径）
+```
+
+`tests/test_migration_lock.py` 共 9 个用例、其中 1 个需要 `EVALRAG_TEST_DATABASE_URL`，
+因此 9 个 skip 的构成是：**6 个 postgres 参数**（本机无 PostgreSQL，CI 真跑）
++ 1 个需要可写临时目录的 OCR 用例 + 1 个需要可写临时目录的迁移用例
++ 1 个需要 `EVALRAG_TEST_DATABASE_URL` 的 advisory lock 真并发用例（本轮新增）；
+这四类的 `pytest.skip` / `pytest.mark.skipif` 位置已核对
+（`tests/test_concurrency.py:97`、`tests/test_migrations.py:109,112`、
+`tests/test_migration_lock.py:138`、`tests/test_ocr.py:28`），全部是环境限制而非代码跳过
+（其中"6 个 postgres 参数"这个拆分沿用第 1 梯队 §7 的既有口径，未逐个重数）。
+
+**未核实项**（如实列出，避免读者把"写了"当成"验过"）：`ruff` / `mypy` / `--cov-fail-under=80`
+本次未重跑（第 1 梯队快照里的 `ruff → All checks passed!` 与 `mypy → Success` 仍是最近一次
+本地记录）；`scripts.check_eval_regression` 与 `scripts.benchmark_local_retrieval` 未重跑；
+`docker compose up` 未在本机执行，因此 `minio` / `createbuckets` 的启动时序与预签名 URL 的
+浏览器可达性只在代码层面审阅；真实 Milvus / Elasticsearch / MinIO / Redis 集群均未连接
+（相关测试用 fake client 与 monkeypatch）。
+
+## 9. 后续项执行结果（2026-10-08 完成）
+
+三项后续项（A/B/C）不是新的能力，而是把"能演示"补成"敢在别人机器上跑"：A 让浏览器不再持有
+不可撤销的长期密钥，B 让最外层的 `App.vue` 第一次有 mount 级集成测试，C 让前端也有 lint/format
+门禁。逐项的根因与取舍记在 [`priority-fixes.md`](priority-fixes.md) 的事项四十二（A），
+这里只给结论与证据。
+
+| 项 | 项目 | 状态 | 关键证据 |
+|---|---|---|---|
+| A | API Key 换服务端会话 + 短期令牌 | ✅ | 浏览器不再持久化任何密钥。新增 `app/core/sessions.py`：`SESSION_TOKEN_PREFIX = "ers_"`、`new_session_token()` = 前缀 + `secrets.token_urlsafe(32)`、`hash_token()` = sha256、`key_fingerprint()` = 哈希前 16 位、`bearer_token()` 解析 `Authorization`；新增 `api_sessions` 表（`app/db/models.py` 的 `ApiSessionRecord`，`token_hash` 唯一索引、**无 tenant 外键**因为租户在配置里）+ 迁移 `alembic/versions/0013_api_sessions.py`（幂等守卫，down_revision `0012_index_outbox`）；`app/api/routes/auth.py` 五个端点——`POST /api/v1/auth/session`（`X-API-Key` 换 `ers_...`，租户不符 403，`AUTH_ENABLED=false` 时也可签发但标 `authenticated=false`）、`GET`（自述）、`DELETE`（吊销自己）、`GET /api/v1/auth/sessions`（审计列表，带 `last_used_at`/`key_fingerprint`）、`DELETE /api/v1/auth/sessions/{id}`（跨租户 404）；`app/api/deps.py` 的 `authenticate()` 改为**先 Bearer 会话再 X-API-Key**，`current_session` 依赖负责 401 的三种原因（未知/已吊销/已过期）；`app/middleware.py` 的限流身份在无密钥时用 `session:<sha256 前 16 位>`（签发本身就要密钥，所以不能借此绕过限流）；`SESSION_TTL_SECONDS`（默认 3600）与 `SESSION_TOUCH_SECONDS`（默认 60，避免每个请求都写一次 `last_used_at`）。前端 `frontend/src/auth.ts` 重写：令牌只进 sessionStorage（`evalrag_session_token`），legacy `evalrag_api_key`/`evalrag_api_key_session` 删除而不迁移，`localStorage`/`sessionStorage` 取值本身可能抛异常故统一走 `storeOf(kind)`；`frontend/src/api.ts` 的 `requestHeaders()` 有令牌就发 `Authorization: Bearer`，并新增 `createSession`/`getSession`/`revokeSession`；`frontend/src/App.vue` 的 `login()` 先兑换令牌再存（失败连 tenant 都不写）、`logout()` 先尽力 `DELETE` 再清本地、`onMounted` 用 `GET /auth/session` 校验且失败即回落登录页。新增 `tests/test_auth_sessions.py` **19 项** + 前端 `auth.test.ts` 9 项、`App.test.ts` 扩到 12 项 |
+| B | `App.vue` 级 mount 集成测试 | ✅ | `frontend/src/App.test.ts` 用 `mount(App)` + `vi.mock('./api')`（mock 整个 api 模块，`vi.hoisted` 规避提升顺序）覆盖 12 个场景：未登录只渲染 `.login-page` 且不发任何请求；挂载后按租户拉知识库/文档/数据集/评测；用 API Key 兑换令牌并写入 sessionStorage；兑换被拒只显示错误、不进入工作区；带令牌挂载时用 `GET /auth/session` 校验并在失效时回落登录页；`streamChat` 的 `onCitations`/`onText` 渲染 `.answer-text` 与 `.citation-list`；`event: error` 渲染 `.alert.error`；`api.search` 500 渲染错误。它证明的是"组件树 + 模板 + 状态机连起来是通的"，但仍在 jsdom 里跑，真实 SSE 流与 vite/esbuild 行为不在覆盖范围内 |
+| C | 前端 ESLint + Prettier 接入 | ✅ | 新增 flat config `frontend/eslint.config.js`（`@eslint/js` recommended + `typescript-eslint` recommended + `eslint-plugin-vue` 的 `flat/recommended`，`**/*.vue` 用 `vue-eslint-parser` 且内层 `parserOptions.parser` 指向 ts 解析器，末尾 `eslint-config-prettier` 关掉与格式化冲突的规则；唯一显式关闭的是 `vue/multi-word-component-names`，因为 `App.vue` 是 `main.ts` 挂载的单一外壳，注释写明理由）；`frontend/.prettierrc.json`（`semi: false`、`singleQuote: true`、`printWidth: 100`、`trailingComma: "all"`）与 `.prettierignore`（`dist/`、`node_modules/`、`_npmcache/`、`package-lock.json`）；`package.json` 增加 `lint`（`eslint . --max-warnings 0`）与 `format:check`（`prettier --check .`）；`.github/workflows/gate-frontend.yml` 在 `npm ci` 之后插入这两步（顺序：`npm ci` → `lint` → `format:check` → `build` → `test`）。接入时按 Prettier 机械重排了 9 个已有文件，无逻辑改动 |
+
+**本轮核实快照**（2026-10-08 在当前工作树实跑；前端数字来自真实 `vitest run`，不是等价执行器）：
+
+```
+pytest                                 → 470 passed, 9 skipped
+ruff check app tests alembic scripts   → All checks passed!
+mypy                                   → Success: no issues found in 49 source files
+cd frontend && npm test                → 44 passed（6 files）
+cd frontend && npm run lint            → exit 0（24 files, --max-warnings 0）
+cd frontend && npm run format:check    → exit 0（All matched files use Prettier code style!）
+cd frontend && npx vue-tsc --noEmit    → exit 0
+```
+
+一条值得记的过程证据：A 的前端部分先由 teammate 用"vite 不可用时的等价执行器"（`@vue/compiler-sfc`
++ `tsc` transpile，无 esbuild）跑出 44/44，但 Lead 用真实 `vitest run` 复跑时多出一个失败——
+`src/auth.test.ts > survives storage that throws (private mode)` 在 `dropLegacyApiKeys()` 里抛
+`SecurityError`：**`sessionStorage` 属性取值本身**就会抛（Safari 隐私模式、沙箱 iframe），
+而这次取值发生在 `try` 之外，所以模块注释里"存储不可用就退回内存"的承诺并没有兑现。
+修复方式是把存储访问收进 `storeOf(kind)`（内部 `try`）再由 `readQuietly`/`removeQuietly`/`writeQuietly`
+调用，修后真实 `vitest` 44/44。这条也说明：**"等价执行器全绿"不能替代真实运行**，
+尤其是断言本身就是关于运行时行为的那些用例。
+
+仍未核实的部分：`npm run build`（`vite build` 走 esbuild，本机沙箱下无法执行）与 CI 里的
+`gate-frontend` 真实运行都没有本地证据；`docker compose up`、真实 Milvus/Elasticsearch/MinIO/Redis、
+GitHub Actions 解析同样未验证。

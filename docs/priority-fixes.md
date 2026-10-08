@@ -915,6 +915,564 @@
   `vite build` 在本沙箱仍无法完成，产物构建只在 CI 上验证；前端目前只有 `vue-tsc` 一道静态检查，
   没有 ESLint/Prettier；组件测试只覆盖 ChatPanel 与 DocumentPanel 两个面板。
 
+## 已完成事项复盘（2026-10-07：outbox 一致性、库级约束、可观测性、对象存储与门禁）
+
+本节覆盖代码评审第 2 梯队 #15–#20 六项。第 2 梯队原本标注为"可选，增强系统设计叙事"，实际落地的六项
+全部属于"出问题时才会被发现"的那一类：outbox 与迁移锁只在崩溃/并发下生效，库级约束只在有人写脏数据时生效，
+可观测性只在排障时生效，对象存储只在多副本部署时生效，门禁只在发布时生效。因此这一节的证据以
+"测试怎么写得出这个场景"为主，而不是以性能数字为主。
+本节的数字口径：全量 `pytest` → **451 passed, 9 skipped**；其余分文件数字见各条"验证命令及结果"。
+
+### 事项三十六：外部索引 outbox + 可重放（#15）
+
+- 根因：摄取链路是"写 PostgreSQL（chunks + `documents.status`）"与"写外部检索后端（Milvus/Elasticsearch）"
+  两次独立写，中间没有事务能把它们绑在一起。worker 在外部写成功之后、`documents.status` 更新为 `ready`
+  之前崩溃，或者外部写在重试若干次后彻底失败，都会留下一个 `processing` 且永远不会再被调度的文档；
+  更早的一版用 Celery 的 `autoretry` 扛这件事，但重试状态活在 broker 的内存/结果后端里，
+  进程重启或 broker 迁移之后就没有任何人知道"这个文档还欠一次外部写"。
+- 设计选择：把"还欠一次外部写"变成数据库里的一行 `index_outbox`
+  （`app/db/models.py:192` 的 `IndexJobRecord`，`__tablename__ = "index_outbox"`），
+  摄取事务的提交点同时落 chunk 与 intent——`app/core/store.py:358-373` 的
+  `save_document_index(self, document_id, knowledge_base_id, chunks)` 在**同一事务**里调
+  `_write_chunks` 与 `_upsert_index_job(..., "upsert")`；外部写搬到
+  `app/tasks.py:227-283` 的 `_sync_document_index`，`app/tasks.py:290-318` 的 `_replay_index_outbox`
+  负责驱动所有到期行。重试预算写在**行上**而不是 broker 上：
+  `INDEX_JOB_MAX_ATTEMPTS = 3`（`app/core/store.py:456-459`，注释 "Small on purpose"），
+  `fail_index_job(job_id, error)`（`app/core/store.py:551-572`）每次累加 `attempts`，
+  到达上限把 `status` 置为 `failed`；Celery 任务注册处（`app/tasks.py:366-369`）特意写明
+  "No autoretry: the row itself carries the retry budget"。领取用
+  `claim_index_job(*, document_id=None, stale_after_seconds=900, due_after_seconds=0, now=None)`
+  （`app/core/store.py:472-535`）：pending 行可领，`processing` 但超过 `stale_after_seconds` 的行
+  表示"上一个 worker 死了"也可领；PostgreSQL 上走 `statement.with_for_update(skip_locked=True)`，
+  `UPDATE` 的 `rowcount != 1` 就 rollback 并返回 `None`（没领到就什么都不做）。
+  `index_outbox` **刻意不加外键**（`app/db/models.py:192` 的 docstring），因为行必须活过它描述的
+  文档/知识库：`delete_document`（`app/core/store.py:390-406`）删行之后补一行 `operation="delete"` 的
+  intent（:402-404 的注释就是这条理由），否则级联删除会把"外部索引还需要清理"这唯一证据一起抹掉；
+  回放时从 PostgreSQL 读源文本（`get_document_chunks`，`app/core/store.py:431-452`），
+  不在 outbox 行里冗余存 payload。错误信息截断到列能容纳的长度：
+  `record.last_error = (error or "")[:2000] or None`。
+- 替代方案与取舍：另一条路是把 PostgreSQL 与外部后端放进一个两阶段提交/XA 事务，
+  或者干脆改成"每次检索时从 PostgreSQL 现算，不维护外部索引副本"。前者被放弃是因为 Milvus/ES
+  都不是 XA 参与者，2PC 只能做成"尽力而为"再补补偿逻辑，复杂度不降反升；后者等于放弃外部后端，
+  与 #10/#11 之后的检索架构冲突。也考虑过把 intent 存成 Celery 的 task id 或一张内存表——
+  放弃的理由就是本节根因里那条：dead letter 记录必须在进程之外、且必须在数据库事务里。
+  代价是 `status` 与 `last_error` 成为新的持久状态：必须有 sweep 定时跑，否则行会静静躺在那里
+  （这就是 `evalrag.replay_index_outbox` 那个周期性任务存在的理由），
+  而且 done 行不删除、只留作"上次回放是什么时候"的记录，表会持续增长。
+- 新增测试：`tests/test_index_outbox.py` 19 项，逐条钉一个场景：
+  `test_chunks_and_the_index_intent_are_committed_together`、`test_uploading_a_document_does_not_claim_it_is_indexed`、
+  `test_reindexing_supersedes_the_previous_intent_instead_of_queueing`、`test_only_one_worker_claims_a_row`、
+  `test_a_dead_worker_does_not_hold_the_row_forever`、`test_a_fresh_row_is_not_due_for_another_sweep_yet`、
+  `test_the_retry_budget_turns_a_hopeless_row_into_a_visible_failure`、
+  `test_a_long_error_is_truncated_to_what_the_column_holds`、`test_deleting_a_document_leaves_a_delete_intent`、
+  `test_deleting_a_knowledge_base_leaves_one_delete_intent_per_document`、`test_a_refused_delete_leaves_no_intent_behind`、
+  `test_a_replay_publishes_the_chunks_postgres_has`、`test_a_replay_of_a_delete_intent_clears_the_index`、
+  `test_a_replay_with_nothing_to_do_says_so`、`test_a_failed_replay_is_booked_and_the_document_stays_unfinished`、
+  `test_the_sweeper_replays_what_the_first_attempt_could_not`、`test_the_sweeper_stops_when_nothing_is_due`、
+  `test_the_default_sweep_leaves_a_just_committed_row_for_later`、
+  `test_the_sweeper_moves_on_instead_of_hammering_one_broken_document`（最后一条对应
+  `_replay_index_outbox` 里"一个坏文档不能中断整轮 sweep"的分支，返回计数为
+  `{"replayed": ..., "failed": ...}`）。`tests/test_tasks.py` 里原本的
+  `test_external_index_failure_keeps_document_failed_and_db_unchanged` 被改写为
+  `test_external_index_failure_leaves_a_replayable_row_behind`（断言失败之后**留下可回放的行**，
+  而不是旧的"数据库不变"），并新增 `test_a_parked_index_row_marks_the_document_failed`
+  （预算耗尽后文档不再是"迟到"而是可见的失败）。迁移侧新增 `alembic/versions/0012_index_outbox.py`
+  （`revision = "0012_index_outbox"`，`down_revision = "0011_postgres_constraints"`），
+  upgrade/downgrade 都先查 `sa.inspect(op.get_bind()).get_table_names()` 再决定是否动表，
+  于是"已经建过"和"回滚过再升级"两种重复执行都是 no-op。
+- 验证命令及结果：`pytest tests/test_index_outbox.py tests/test_tasks.py -q` 通过（包含在上述专项
+  `tests/test_storage.py tests/test_upload_streaming.py tests/test_tasks.py` → **52 passed** 的口径内）；
+  全量 `pytest` → **451 passed, 9 skipped**。事后可复核"重复 upgrade 也成立"的是
+  `tests/test_migrations.py::test_every_downgrade_restores_the_previous_schema`，
+  它在每个修订版本上跑 upgrade→downgrade→比对快照（注释里写明 downgrade 后再 upgrade
+  也顺带证明 upgrade 路径可重复执行）。**未在本地验证**：PostgreSQL 上的
+  `with_for_update(skip_locked=True)` 行锁行为（本机没有 PostgreSQL，该分支在 CI 的
+  `postgres:16` service job 里跑）、以及真实 Milvus/Elasticsearch 的写失败语义
+  （既有契约测试用的是 fake client）。
+- 仍存在的限制：outbox 解决的是"最终一致"，不是"立刻一致"——上传接口返回 201 之后到
+  外部索引可搜之间存在一个窗口，窗口长度由 sweep 周期决定；`done` 行不清理，
+  长期运行需要另加归档策略（P1 清单里"原始文件清理/归档策略"那条仍未勾）；
+  回放是"从 PostgreSQL 全量重建该文档的索引"，没有做增量 diff，文档很大的时候回放成本等于重灌一次；
+  外部后端的删除失败与更新失败共用同一套 `attempts` 预算，没有区分"可重试"与"不该重试"的错误。
+
+### 事项三十七：状态 CheckConstraint + PostgreSQL JSONB + 外键级联（#16）
+
+- 根因：`documents.status` / `evaluations.status` 在数据库里是任意字符串，只有 Python 侧的 Literal
+  在约束取值——任何绕过 ORM 的写入（手写 SQL、脚本、以后新增的写入路径）都能塞进一个
+  谁都不认识的状态，而这种行在查询侧的表现是"永远不被任何分支命中"，排查时看起来像丢数据；
+  `parameters_json` / `results_json` / `expected_evidence_json` 在 PG 上是 `TEXT`，
+  存的是 JSON 但没有校验、不能建 GIN 索引；外键只声明了引用关系、没有 `ON DELETE` 规则，
+  于是删知识库要么被外键挡住、要么需要应用层手工按依赖顺序删表。
+- 设计选择：把约束下沉到数据库，并让**模型成为唯一事实来源**。`app/db/models.py:51-53` 加
+  `_status_check(column, allowed) -> str` 生成 `f"{column} IN ('a', 'b')"`，
+  `DocumentRecord`（:66-90）带 `CheckConstraint(_status_check("status", DOCUMENT_STATUSES), name="ck_documents_status")`，
+  `EvaluationRecord`（:145 起）同样。JSON 列用
+  `JSON_DOCUMENT = JSON().with_variant(JSONB(), "postgresql")`（:45-48）：PG 分支上是 JSONB，
+  其它方言保持泛型 `JSON`，应用层照样传 Python 对象，**一套代码路径服务两种方言**。
+  级联策略按"数据的归属"分两类：内容随语料死——`documents.knowledge_base_id`、
+  `chunks.document_id` / `chunks.knowledge_base_id`、`evaluation_datasets.knowledge_base_id`、
+  `evaluation_examples.dataset_id` 全部 `ondelete="CASCADE"`；而评测历史必须活过被它测过的语料——
+  `evaluations.knowledge_base_id` / `evaluations.dataset_id` 用 `ondelete="SET NULL"` 且 `nullable=True`
+  （:157-161）。SQLite 侧两个开关缺一不可：`create_engine` 加
+  `json_serializer=lambda value: json.dumps(value, ensure_ascii=False)`
+  （`app/core/store.py:74-83`，否则中文在库里被转义成 `\uXXXX`、库不可读），
+  以及每个连接执行 `PRAGMA foreign_keys=ON`（`app/core/store.py:89-104`，
+  注释已写明 SQLite **默认关闭**外键，不打开的话级联与 CHECK 会静默失效）。
+  迁移不复述这套逻辑，而是从模型读出来生成 DDL：新增 `app/db/postgres_schema.py` 提供
+  `desired_check_constraints()` / `jsonb_columns()` / `desired_foreign_keys()` 与
+  `upgrade_statements(inspector)` / `downgrade_statements(inspector)` 两个纯函数，
+  `alembic/versions/0011_postgres_constraints.py` 只做两件事——在非 PostgreSQL 方言上返回空语句表，
+  否则执行这两个函数产出的语句表。
+- 替代方案与取舍：考虑过用 PostgreSQL 原生 `ENUM` 类型而不是 `CHECK`，放弃是因为加一个取值需要
+  `ALTER TYPE ... ADD VALUE`（在旧版本 PG 上还不能在事务块里跑），而 CHECK 的变更只是 drop + add
+  一条普通 DDL；也考虑过在应用层做一个"状态机校验"而不动数据库，放弃是因为它挡不住绕过 ORM 的写入，
+  等于没有解决根因。`postgres_schema.py` 抽成独立模块而不是写在 revision 里，取舍点是
+  "多一个文件"换"可测性"：schema inspector 是纯输入，于是"这个库缺什么"可以在没有 PG 服务的机器上
+  逐条钉住（本机就是这种情况），revision 本身缩到两个循环。**SQLite 刻意不动**（`0011` 在非 PG 上是
+  no-op），因为 SQLite 不能给已有表加 CHECK、也不能改外键；本地新建库由
+  `Base.metadata.create_all()` 直接带上这三件事——代价是"本地 SQLite 老库"得不到这些约束，
+  只能重建库。另一个必须显式处理的坑是**顺序**：模型描述的是最终 schema，而 `0011` 跑在
+  `0012` 建出 `index_outbox` 之前，所以 `upgrade_statements` / `downgrade_statements` 都用
+  `_existing_tables(inspector)` 过滤掉"数据库里还没有的表"，否则全新库的 `alembic upgrade head`
+  会在 `0011` 就给一张不存在的表加约束（这正是那个必须成功的运行路径）；
+  JSONB 转换用 `USING NULLIF({column}, '')::jsonb`，好让文本为空串的历史行不至于中断迁移。
+- 新增测试：`tests/test_schema_constraints.py` 13 项，其中
+  `test_api_literals_match_the_status_sets_the_check_constraints_allow` 把
+  `get_args(DocumentStatus) == DOCUMENT_STATUSES`（`EvaluationStatus` 同理）钉住——
+  这条是"模型是唯一事实来源"这个选择的守护测试，改了一边不改另一边就会红；
+  `test_the_database_rejects_a_document_status_it_does_not_declare`、
+  `test_the_database_rejects_an_evaluation_status_it_does_not_declare`、
+  `test_a_status_typo_is_rejected_before_it_reaches_the_database`、
+  `test_every_declared_document_status_is_accepted`（parametrize，防止约束写得太紧）；
+  级联侧 `test_deleting_a_knowledge_base_takes_its_documents_chunks_and_datasets`
+  （删前 documents/chunks 计数 1/2，删后全 0，评测数据集与样例也归零）、
+  `test_evaluation_history_survives_the_corpus_it_measured`
+  （`knowledge_base_id` / `dataset_id` 变 `None`，而 dataset_name 仍保留 "golden"）、
+  `test_deleting_a_document_still_leaves_the_dataset_alone`、
+  `test_deleting_another_tenants_knowledge_base_is_refused`、
+  `test_deleting_a_missing_knowledge_base_reports_no_deletion`；JSON 侧
+  `test_parameters_and_results_come_back_as_the_objects_that_went_in`、
+  `test_json_is_stored_as_readable_text_not_escaped_ascii`（`assert "全对" in str(raw)`，
+  直接对着上面那条 `json_serializer` 的取舍）、
+  `test_expected_evidence_hops_survive_the_round_trip`。
+  迁移侧 `tests/test_postgres_schema.py` 14 项，用 `FakeInspector` 分别模拟"0010 留下的形状"
+  与"0011 跑完的形状"：`test_status_columns_are_constrained_to_the_documented_values`
+  （四个约束名与条件逐字比对，含 `status IN ('pending', 'processing', 'ready', 'failed', 'needs_ocr')`
+  与 `status IN ('queued', 'running', 'completed', 'failed')`）、
+  `test_json_columns_are_the_three_documents_grow_into`、
+  `test_deleting_a_knowledge_base_cascades_to_its_content_but_not_its_evaluations`
+  （CASCADE 集合与 SET NULL 集合分别钉死）、
+  `test_constraint_names_are_stable_so_a_downgrade_can_find_them`
+  （`fk_{table}_{columns}` 与 legacy 名 `{table}_{columns}_fkey` 两个命名都钉住，
+  因为 downgrade 要靠 legacy 名把 0001–0010 的原始约束名放回去）、
+  `test_upgrade_adds_the_check_constraints`、`test_upgrade_converts_the_json_columns_to_jsonb`、
+  `test_upgrade_replaces_the_foreign_keys_with_cascading_ones`、
+  `test_upgrade_drops_every_old_constraint_exactly_once`、
+  `test_upgrade_changes_nothing_when_the_database_already_matches`（幂等）、
+  `test_upgrade_touches_only_the_tables_it_owns`、`test_downgrade_puts_the_previous_shape_back`
+  （并断言 downgrade 出来的语句里 `not any("ON DELETE" in statement ...)`）、
+  `test_downgrade_is_idempotent_before_the_upgrade_ran`、
+  `test_statements_never_target_a_table_a_later_revision_creates`（就是上面那条顺序坑）、
+  `test_a_table_that_exists_is_still_migrated`（证明存在性守卫不是"新表永久跳过"）。
+- 验证命令及结果：`pytest tests/test_schema_constraints.py tests/test_postgres_schema.py -q` 通过；
+  全量 `pytest` → **451 passed, 9 skipped**。**未在本地验证**：`0011` 的真实 DDL 只在 CI 的
+  `postgres:16` service 上执行（本机没有 PostgreSQL，`postgres_schema.py:8-11` 的 docstring
+  把这条写明为"这里只能钉住交给数据库的语句"）；SQLite 上 `PRAGMA foreign_keys=ON` 的
+  级联效果由 `test_schema_constraints.py` 覆盖，但"老 SQLite 库升级后仍缺约束"这一条没有测试
+  （它按设计就不做）。
+- 仍存在的限制：`needs_ocr` 也算合法状态，所以"扫码件没有被处理"这件事在数据库层是合法的，
+  约束只能挡住拼错的值、挡不住业务上不该出现的值；跨租户一致性只做到
+  "删除时带 `tenant_id` 条件、`rowcount != 1` 就回滚且不留 intent"（`delete_knowledge_base`，
+  `app/core/store.py:232-267`），**没有**数据库级的行级安全或租户列 CHECK，
+  也就是说直接连库的写入仍能跨租户；JSONB 只做了类型转换，没有建 GIN 索引、也没有用
+  `jsonb_path_ops` 之类的查询优化——目前没有任何按 JSON 内容过滤的查询；
+  `0011` 在 SQLite 上是 no-op，因此本地开发库与 CI 的 PG 库在"约束强度"上并不等价。
+
+### 事项三十八：Prometheus 指标 + readiness 深检查（#17）
+
+- 根因：`/metrics` 当时只有 HTTP 计数这类最外层信号，Cache、检索各阶段、Celery、数据库连接池
+  四层全是黑盒——缓存命中率被拖低时看不出来，检索变慢时看不出是 dense 还是 sparse 还是融合，
+  worker 积压时看不出是任务失败还是根本没起来，连接池打满时只能等请求超时报错；
+  `/health/ready` 只回答"进程活着"，按配置启用的外部后端（Milvus/ES）挂掉时它照样返回 200，
+  于是编排器继续把流量打进来。
+- 设计选择：指标端手写 Prometheus 文本格式而不引入 `prometheus_client`
+  （`app/core/metrics.py:74` 的 `class _Histogram`、:127 的 `class Metrics`），
+  理由是这一层只需要 counter/gauge/histogram 三种原语与一个 `render()`，多一个依赖不值得；
+  采集点选在"一次操作的边界"而不是函数内部：缓存走 `observe_cache_hit/miss/error`
+  （:153/:156/:159，由 `cache_backend_name(cache)`（:97）从实例上读出 backend 标签，
+  于是同一个 `MemoryTTLCache` 与 `RedisCache` 自动分开）、检索走
+  `time_stage(stage)` 上下文管理器（:164/:169，通道自己计自己的时间，hybrid 只记合并那一段）、
+  Celery 走 `observe_task_started/succeeded/failed`（:184/:187/:190）、连接池走
+  `read_pool` / `read_engine_pool`（:195/:217，读不到 accessor 就**不发布样本**而不是抛异常，
+  保证 scrape 永远能渲染）、外部后端健康走 `set_backend_health`（:224）。
+  渲染出的指标名逐字为：`evalrag_http_requests_total{path,status}`、
+  `evalrag_http_errors_total{path}`、`evalrag_http_request_duration_seconds_{bucket,sum,count}`、
+  `evalrag_cache_{hits,misses,errors}_total{backend}`、
+  `evalrag_retrieval_stage_duration_seconds_{bucket,sum,count}{stage}`、
+  `evalrag_celery_tasks_{started,succeeded,failed}_total{task}`、
+  `evalrag_db_pool_{size,checked_out,idle,overflow,max_overflow}{pool}`、
+  `evalrag_external_backend_up{backend}`。readiness 侧（`app/api/routes/health.py`）把
+  "按配置启用"写成显式分支：`_check_redis`（:28）用
+  `await asyncio.wait_for(client.ping(), timeout=_timeout(settings))`，
+  `_check_database`（:53）走连接探测，`_inspect_queue`（:62）用同步 broker 探针经
+  `asyncio.to_thread` 包起来（`celery_app.control.inspect(timeout=_timeout(settings))`，
+  没人应答就返回 `{"status": _ERROR, "error": "no Celery worker answered the ping"}`，
+  顺带取 `active()`/`reserved()`），`_check_backends`（:99）对每个启用的后端调
+  `probe()` 并把探测失败本身当作健康信号（probe 返回 false → `"probe returned false"`）；
+  未启用的后端返回 `"skipped"` 而不是假装 OK。`GET /metrics`（:254）是
+  `PlainTextResponse` 且 `include_in_schema=False`。
+- 替代方案与取舍：最省事的是 `pip install prometheus_client` 然后用它的
+  `Counter`/`Gauge`/`Histogram` 与 `generate_latest()`，放弃的理由有两个：
+  一是多一个运行时依赖，二是它的默认 multiprocess 模式在 Celery prefork worker 下
+  本来就要额外配置（否则各进程各记一份、互相覆盖），而这里需要的是"每个进程一份、
+  按需渲染"；自己维护的代价是直方图的桶边界与累积语义要自己写对
+  （`test_stage_histogram_exposes_cumulative_buckets` 就是钉这个的）。
+  readiness 的另一个取舍是"探测失败算不算不健康"：外部后端探测本身抛异常（SDK 没连上）
+  在语义上既有"后端挂了"也有"探测代码写错了"两种解释，这里选择**当作不健康**并带上
+  `checks[<backend>]["error"]` 原文，因为对编排器来说"这个依赖不可确认"就等于不能接流量；
+  代价是一次配置错误会让整个 readiness 变 503，排查时得先看 `/health` 的逐项明细。
+  延迟不设门禁、指标不设阈值告警（阈值是部署侧的事，仓库里只保证指标存在且格式正确）。
+- 新增测试：`tests/test_observability_metrics.py` 25 项，前半段钉采集点、后半段钉 readiness。
+  缓存：`test_memory_cache_counts_hits_and_misses`、`test_expired_entry_counts_as_a_miss_not_a_hit`
+  （过期不等于命中，这正是缓存指标最容易写错的地方）、
+  `test_redis_cache_separates_an_outage_from_a_miss`（redis 报错记 error 而不是 miss）、
+  `test_redis_cache_counts_hits_and_misses`、`test_cache_backend_name_reads_the_instance`、
+  `test_a_cache_without_metrics_does_not_count`（`metrics=None` 时零开销路径）；
+  检索：`test_local_retriever_times_its_channel`（`..._count{stage="sparse"} 1` 与
+  `stage="dense"`）、`test_hybrid_retriever_times_both_channels_and_the_fusion`（dense/sparse/fusion 各 1）、
+  `test_stage_histogram_exposes_cumulative_buckets`、`test_retrieval_service_times_the_fused_stage`
+  （fusion 与 rerank 都记）、`test_create_retriever_carries_metrics_into_the_channels`
+  （metrics 一路透传到通道，防止"造了 retriever 但没接指标"）；
+  Celery 与池：`test_celery_counters_are_rendered_per_task`、
+  `test_task_body_reports_started_succeeded_and_failed`、
+  `test_process_document_run_counts_through_the_worker_metrics`、
+  `test_pool_gauges_come_from_the_sqlalchemy_pool`（断言
+  `evalrag_db_pool_size{pool="default"} 5`、`max_overflow ... 3`、`checked_out ... 0`）、
+  `test_pool_gauge_reading_never_raises_on_a_pool_without_accessors`、
+  `test_metrics_endpoint_publishes_pool_and_http_series`、`test_backend_health_gauge_renders_zero_and_one`；
+  readiness：`test_readiness_keeps_the_legacy_fields_and_adds_checks`
+  （`status == "ready"`、`database == "ok"`，而 redis/queue/milvus/elasticsearch 都是 `"skipped"`，
+  证明"未启用就跳过"）、`test_readiness_degrades_when_the_broker_has_no_worker`
+  （`status == "degraded"`、错误文本含 "no Celery worker"）、
+  `test_readiness_degrades_when_the_redis_ping_fails`（错误文本含 "connection refused"）、
+  `test_readiness_reports_a_reachable_redis_as_ok`、
+  `test_readiness_degrades_when_an_enabled_backend_probe_fails`
+  （503，错误文本含 "milvus offline"，且 gauge 变 0）、`test_readiness_marks_a_healthy_backend_up`、
+  `test_readiness_returns_503_when_the_database_is_unreachable`。
+- 验证命令及结果：`pytest tests/test_observability_metrics.py -q` 通过；
+  全量 `pytest` → **451 passed, 9 skipped**。**未在本地验证**：真实 Redis 与真实
+  Celery worker 的探测（测试里用 fake client 与 monkeypatch 代替，
+  `test_observability_metrics.py:102` 用 `pytest.importorskip("redis.asyncio")`
+  在缺 redis 包时跳过）；真实 Milvus/ES 的 `probe()` 实现（既有契约测试用 fake client，
+  没有连过真实集群，这条限制在 `docs/code-review-2026-10-04.md` §5 里已经主动交代过）。
+- 仍存在的限制：指标是**进程内**的，没有做多 worker 聚合——Celery prefork 下每个子进程各有一份
+  计数器，Prometheus 侧要靠 `sum by (...)` 自己合，仓库里没有为此加 multiprocess 模式；
+  直方图桶边界是常量（`DURATION_BUCKETS`），没有按端点/阶段分桶；
+  没有暴露"当前队列深度"这类瞬时 gauge（`_inspect_queue` 的 `active()`/`reserved()` 只出现在
+  readiness 响应里，没进指标）；readiness 的每个探测都有超时，但"探测器自己卡住"只由
+  `_timeout(settings)` 兜底，没有熔断/降级缓存，外部后端持续超时时每次 `/health/ready`
+  都会付一次超时代价。
+
+### 事项三十九：上传落对象存储 + 预签名 URL（#18）
+
+- 根因：上传文件写的是 API 与 Worker 共享的本地卷（`uploads_data:/app/data/uploads`），
+  于是"能不能水平扩副本"这件事被一个本地卷绑定死：API 副本 A 收的文件，Worker 副本 B 不一定看得到；
+  卷本身也没有版本、生命周期和校验，备份与迁移都要单独处理；对外的下载接口还要由 API 进程
+  把整个文件读进内存再吐出去。
+- 设计选择：抽一个 `ObjectStore` 协议（`app/core/storage.py:80`，方法
+  `put/get/delete/presign_get`）与两个实现，默认仍是本地（`LocalObjectStore`，:104），
+  配 `OBJECT_STORE=s3` 才切 `S3ObjectStore`（:163）——`create_object_store(settings)`（:225-242）
+  里那句 `if settings.object_store.strip().lower() == "s3"` 意味着写错一个字母会**退回本地**而不是崩，
+  `test_local_is_the_default_backend_and_a_typo_does_not_change_that` 钉的就是这个。
+  key 由 id 与文件名推导、不改 schema：`document_key(document_id, filename) -> str`（:55-61）
+  返回 `f"{UPLOAD_PREFIX}/{document_id}/{_safe_name(filename)}"`，其中 `_safe_name`（:42）
+  把非 `alnum/._-` 的字符换成 `_`、空名回落成 `document.txt`——于是客户端传来的
+  `../../etc/passwd` 落成 key `documents/doc-1/.._.._etc_passwd`，逃不出前缀。
+  本地实现用"写 `.part` 再 `temporary.replace(target)`"保证半截文件不会以目标名出现，
+  并对越界 key 显式报错 `object key escapes the store root`（另一层防护）；
+  `presign_get` 在本地实现上抛 `PresignUnsupported`（:38），接口层捕获之后**退回读字节再返回**
+  （`app/api/routes/documents.py:195-232` 的 `download_document`），
+  于是 S3 走 307 重定向、本地走流式响应，同一路由两种后端都自洽。
+  S3 实现里两个细节：`__init__(client, bucket, presign_client=None)` 的第二个可选 client
+  用于签名 Host 与内部 endpoint 不同的公开端点（否则预签名 URL 里的主机名是
+  `http://minio:9000`，浏览器解析不了）；`get` 在 `finally` 里 `body.close()` 防连接泄漏。
+  下载响应头不是拼 `filename=` 而是 `download_filename(filename)`（:245-247）
+  = `f"attachment; filename*=UTF-8''{quote(filename)}"`，因为中文文件名直接拼进响应头会破坏它。
+  部署侧把这件事变成默认路径：`docker-compose.yml` 加 `minio` 服务与一次性的 `createbuckets`
+  服务（`mc mb --ignore-existing`），API 与 Worker 的 env 都注入
+  `OBJECT_STORE: s3` / `S3_ENDPOINT_URL: http://minio:9000` /
+  `S3_PUBLIC_ENDPOINT_URL: http://localhost:${MINIO_PORT:-9000}` / `S3_BUCKET` / `S3_ACCESS_KEY` /
+  `S3_SECRET_KEY`，并删掉两处 `uploads_data` 挂载、把卷换成 `minio_data`。
+- 替代方案与取舍：另一条路是"继续用共享卷，但把卷换成 NFS/EFS"，放弃是因为它只解决多副本可见性，
+  不解决生命周期、预签名与备份，而且把云厂商的文件系统语义引进来；也考虑过
+  "把文件直接存进 PostgreSQL 的大对象/bytea"，放弃是因为会把数据库备份体积和 WAL 一起推高，
+  且与 #16 的库结构改造方向相反。`presign_get` 的取舍是安全边界：
+  预签名 URL 让客户端绕过 API 直连对象存储，好处是 API 不再转发大文件、坏处是 URL 在有效期内
+  是**持有即可访问**的凭证——所以有效期做成配置（`s3_presign_seconds`，默认 300），
+  并且本地后端明确不支持（抛 `PresignUnsupported` 而不是返回一个假 URL）。
+  删除路径上做了明确的取舍：`delete_document`（`app/api/routes/documents.py:168-192`）先删数据库行，
+  然后 `_remove_upload` 抛 `ObjectStoreError` 时**只 warning 不失败**——注释里的理由是
+  "行已经没了，这正是请求承诺的；残留对象只花存储不损正确性"，也就是说这里选了
+  "宁可漏一个孤儿对象，也不要让一次成功的删除返回 500"。
+  上传路径相反，是 fail-fast：`container.storage.put` 抛错直接 503
+  "document could not be stored"，Celery 排队失败也 503 并顺手 `_remove_upload` 清掉已写入的对象。
+- 新增测试：`tests/test_storage.py` 19 项（纯单元，不碰网络）：
+  `test_keys_are_derived_from_the_document_id_and_the_filename`（含中文名 →
+  `documents/doc-1/借款规定_2024.md`）、`test_a_client_filename_cannot_escape_the_document_prefix`、
+  `test_an_empty_filename_still_produces_a_usable_key`、
+  `test_local_store_round_trips_bytes_and_reports_the_size`（并断言不留 `*.part`）、
+  `test_local_store_overwrites_an_object_wholesale`、`test_local_store_reports_a_missing_object`、
+  `test_deleting_an_object_that_is_not_there_is_not_an_error`（delete 幂等）、
+  `test_local_store_refuses_a_key_that_escapes_its_root`、`test_local_store_cannot_hand_out_urls`、
+  `test_local_is_the_default_backend_and_a_typo_does_not_change_that`、
+  `test_s3_backend_is_built_only_when_asked_for`、`test_a_public_endpoint_gets_its_own_signing_client`
+  （`set(endpoints) == {"https://objects.example.com", "http://minio:9000"}`）、
+  `test_s3_put_sends_the_body_and_reports_its_size`、`test_s3_put_needs_a_measurable_body`、
+  `test_s3_get_reads_the_body`、`test_s3_get_maps_a_missing_key_to_object_missing`、
+  `test_s3_get_lets_a_real_backend_failure_through`（只把"确实不存在"映射成 `ObjectMissing`，
+  真故障原样抛出）、`test_s3_delete_and_presign_use_the_configured_bucket_and_window`、
+  `test_download_filename_is_encoded_so_a_client_cannot_break_the_header`
+  （`assert "%E5%80%9F" in value`）。接口层新增 6 项在 `tests/test_upload_streaming.py`：
+  `test_api_stores_the_upload_under_a_derived_key_and_queues_processing`（取代之前的
+  `test_api_streams_upload_to_disk_and_queues_processing`）、
+  `test_a_filename_cannot_walk_out_of_the_store_root`、
+  `test_api_reports_503_when_the_object_store_refuses_the_write`、
+  `test_content_route_returns_the_stored_bytes`、
+  `test_content_route_redirects_to_a_presigned_url`、`test_content_route_reports_a_missing_object`；
+  同一文件里的 `test_api_rejects_oversized_upload_and_stores_nothing` 与
+  `test_upload_is_spooled_in_bounded_chunks` 是改名/改写后的既有用例（原来叫
+  `..._and_leaves_nothing_on_disk` / `..._is_written_in_bounded_chunks`），
+  断言从"磁盘上没有文件"改成"对象存储里什么都没有"。
+- 验证命令及结果：`pytest tests/test_storage.py tests/test_upload_streaming.py tests/test_tasks.py -q`
+  → **52 passed**（这三个文件是本项的专项口径）；全量 `pytest` → **451 passed, 9 skipped**。
+  **未在本地验证**：真实 MinIO/S3 的端到端上传（`S3ObjectStore` 的测试全部用 fake client
+  钉调用参数，没有起过 MinIO）；`docker-compose.yml` 里 `minio` / `createbuckets` 两个服务的
+  实际拉起（`docker compose up` 未在本机执行），因此 `createbuckets` 的 entrypoint 循环
+  与 healthcheck 时序只在代码层面审阅过；CI 的 `docker-build` job 只做 `push: false` 构建，
+  不跑 compose。
+- 仍存在的限制：`LocalObjectStore` 的"先写 `.part` 再 replace"只在同一文件系统内原子，
+  跨设备/网络文件系统上不成立；本地后端没有并发写同一 key 的协调（后写覆盖先写），
+  也没有配额与清理（P1 清单里"原始文件清理/归档策略"仍未勾）；
+  预签名 URL 一旦签发，在有效期内无法吊销（对象存储的通用限制，仓库里没有做额外的
+  "一次性 token"包装）；孤儿对象只 warning 不失败，长期会积累，
+  而 `index_outbox` 的 delete intent 清的是**索引**、不是对象存储里的对象——
+  这两条清理线目前是分开的，没有统一的对账任务。
+
+### 事项四十：Alembic 迁移加 advisory lock（#19）
+
+- 根因：每个 API/Worker 副本启动时都会跑一次 `alembic upgrade head`。在 PostgreSQL 上，
+  两个进程可以同时读到相同的 `alembic_version`、同时判断"要应用修订 N"，
+  然后一个建表成功、另一个撞上"relation already exists"，或者更糟——一个进程在修订 N 中间，
+  另一个开始跑修订 N+1。Alembic 自身**没有跨进程锁**，它只保证单进程内的顺序。
+  这件事在 SQLite 上不会发生（单写者 + 文件锁），所以问题只在生产形态的 PostgreSQL 上出现，
+  属于"本地怎么测都测不出来"的一类。
+- 设计选择：用一个**独立连接**上的 PostgreSQL session 级 advisory lock，把它包在迁移运行外面。
+  新文件 `app/db/migration_lock.py`：常量 `MIGRATION_LOCK_KEY = 5_710_214_013_041_212`（:33）、
+  `LOCK_ENV_VAR = "EVALRAG_MIGRATION_LOCK"`（:36）、
+  `_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})`（:38），
+  加 `lock_enabled(env=None) -> bool`（:43）与
+  `@contextmanager migration_lock(engine: Engine) -> Iterator[bool]`（:49-65）。
+  接进 Alembic 只改一行结构：`alembic/env.py` 的 `run_migrations_online()` 里把
+  `with connectable.connect() as connection:` 改成
+  `with migration_lock(connectable), connectable.connect() as connection:`，
+  并 `from app.db.migration_lock import migration_lock`。三个设计细节值得写下来：
+  锁用的是**与跑迁移的连接分开**的那条连接（注释里的理由：commit/rollback 不能让它提前释放，
+  也不会漏进应用连接池）；锁是 session 级（`SELECT pg_advisory_lock(:key)` /
+  `SELECT pg_advisory_unlock(:key)`），并且用 `finally` 解锁，所以迁移抛异常也会释放；
+  非 PostgreSQL 方言或显式关闭时 yield `False` 并且**完全不建立连接**，
+  于是 `alembic upgrade head` 在 SQLite 上的行为与之前逐字相同（本机开发路径零变化）。
+  关闭开关做成了"只有明确写 0/false/no/off 才关"（未设置 = 开）——
+  理由是安全默认：忘记配等于有保护，而不是等于裸奔。
+- 替代方案与取舍：其他三条路都考虑过。一是"用文件锁"（`flock`），放弃是因为它只在单机有效，
+  而这里要防的正是多副本；二是"用数据库行锁/一张锁表"，放弃是因为拿到锁的进程崩溃后
+  要额外做超时清理（advisory lock 随连接断开自动释放，不需要清理逻辑）；
+  三是"把迁移搬出应用进程、改成部署流水线里单独一步"，那是最干净的方案，
+  但会改变现有部署形态（compose 里的 api/worker 都靠启动时迁移），
+  而本项的目标是"不改部署形态就把并发迁移变安全"——这个方案记为后续演进，
+  不是本轮范围。代价方面：advisory lock 是 PostgreSQL 特有的，
+  换成 MySQL 要另写一套（`GET_LOCK`）；锁的粒度是"整个迁移流程"，
+  所以慢迁移会阻塞所有副本启动，副本多的时候启动时间等于"最长迁移时间"；
+  另外 `MIGRATION_LOCK_KEY` 是写死的常量，同一个 PG 实例上跑两个项目如果键撞了会互相等
+  ——`test_lock_key_is_a_positive_63_bit_integer` 钉的是"它是一个合法的 bigint 键"，不是唯一性。
+- 新增测试：`tests/test_migration_lock.py` 9 项。纯单元部分用一个记录调用的
+  `_RecordingConnection`（:34）与 `_FakeEngine`（:54）钉行为：
+  `test_lock_key_is_a_positive_63_bit_integer`（`0 < MIGRATION_LOCK_KEY < 2**63`）、
+  `test_lock_is_enabled_unless_explicitly_disabled`、`test_lock_can_be_disabled_by_configuration`、
+  `test_postgres_engine_locks_before_the_migration_and_unlocks_after`、
+  `test_unlock_happens_even_when_the_migration_raises`、
+  `test_non_postgres_dialects_do_not_connect_at_all`（断言临时库文件根本没被创建）、
+  `test_disabled_lock_does_not_connect_to_postgres`（`engine.connects == 0`）、
+  `test_env_module_wires_the_lock_around_the_migration_run`——最后这条**读 `alembic/env.py`
+  的源码文本**，断言里面确实有 `from app.db.migration_lock import migration_lock` 与
+  `migration_lock(connectable)`，防的是"helper 写好了但没接上"这种最难发现的漏接线。
+  真并发一条：`test_a_second_migrator_waits_for_the_advisory_lock`，
+  需要 `EVALRAG_TEST_DATABASE_URL`（没有就 skip），持锁时第二个
+  `command.upgrade(config, "head")` 必须在 2 秒内 FutureTimeout，释放后 60 秒内完成。
+- 验证命令及结果：`pytest tests/test_migration_lock.py -q` 本地为
+  **8 passed, 1 skipped**（跳过的那条就是需要 `EVALRAG_TEST_DATABASE_URL` 的真并发用例；
+  这一条也是全量 `pytest` 从 8 个 skip 变成 **9 个 skip** 的来源——它是本轮新增的、
+  且属于环境限制而非代码跳过）；全量 `pytest` → **451 passed, 9 skipped**。
+  **未在本地验证**：真实 PostgreSQL 上两个进程同时 `alembic upgrade head` 的互斥行为
+  （本机没有 PostgreSQL，该用例在 CI 的 `postgres:16` service 上跑）；
+  "锁在 SQLite 上确实不建立连接"由 fake engine 断言覆盖，但没有在真实 SQLite 迁移流程里
+  再验证一遍（`alembic/env.py` 的实际调用路径由上面那条源码断言守着）。
+- 仍存在的限制：advisory lock 只在 PostgreSQL 上有效，其它方言仍然是"相信单写者"；
+  锁的粒度是整个 `upgrade head`，没有按修订版本加锁，所以 N 个副本的启动延迟由最慢的一次迁移决定；
+  没有给"等锁"设超时——如果持锁进程卡住（例如迁移里有一个长事务），其它副本会无限等下去
+  （`_LOCK_SQL` 是阻塞式的 `pg_advisory_lock`，不是 `pg_try_advisory_lock` + 重试）；
+  锁键是硬编码常量，没有按数据库名派生的命名空间；
+  另外 `#19` 原文里"`0003` 的 downgrade 补齐或明确声明 forward-only"这半句属第 1 梯队 #8 的成果
+  （`alembic/versions/0003_evaluation_datasets.py` 的 downgrade 已补 3 个索引与 7 列，
+  见 `docs/code-review-2026-10-04.md` §7 第 8 行），本轮未再改动该文件。
+
+### 事项四十一：CI 与 release 门禁（#20）
+
+- 根因：三个问题叠在一起。第一，`release.yml` 打 tag 就直接构建并推送镜像，
+  没有任何"测试过了吗"的前提，因为 GitHub 的 `needs` **只能引用同一个工作流文件里的 job**，
+  写 `needs: [backend, frontend, eval-gate]` 去引用 `ci.yml` 里的 job 不是"不生效"，
+  而是整个 `release.yml` 加载失败。第二，CI 里 `pip install -e ".[dev]"` 意味着
+  `uv.lock` 只是个装饰品——真正的依赖解析每次都现场联网重新做一遍，锁文件与
+  `pyproject.toml` 不一致也没人知道。第三，CI 没有 `docker build`、也没有依赖漏洞扫描，
+  于是"镜像能不能构建"和"依赖里有没有已知漏洞"这两件事都在本地靠自觉。
+- 设计选择：把三个门禁的定义抽成**可复用工作流**，让 CI 和 release 共用同一份步骤。
+  新增 `.github/workflows/gate-backend.yml`（`on: workflow_call`）、`gate-frontend.yml`、
+  `gate-eval.yml`，`ci.yml` 里原本内联的 backend/frontend/eval-gate 三个 job 改成
+  `uses: ./.github/workflows/gate-*.yml`，`release.yml` 也用同样的 `uses:` 把
+  `backend` / `frontend` / `eval-gate` 三个 job **真实地建出来**，
+  然后 `images` job 写 `needs: [backend, frontend, eval-gate]`——这样
+  "needs 不能跨文件"的限制就被绕开了，而步骤定义只有一份、不存在两处漂移
+  （两条理由都写在 `gate-backend.yml:1-4` 与 `release.yml:12-16` 的注释里）。
+  三个门禁的内容分别是：backend（`uv sync --frozen --extra dev` → `uv lock --check` →
+  `uv run --frozen ruff check app tests alembic scripts` → `uv run --frozen mypy` →
+  `uv run --frozen pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80`，
+  `gate-backend.yml:38-39`）；frontend（`npm ci` → `npm run lint` → `npm run format:check` →
+  `npm run build` → `npm test`，`gate-frontend.yml:22-28`）；
+  eval-gate（用仓库里提交的小夹具语料 `tests/fixtures/eval_gate/corpus` 与 `golden.json`
+  跑 `python -m scripts.run_golden_experiment`，再用
+  `python -m scripts.check_eval_regression --baseline tests/fixtures/eval_gate/baseline.json --tolerance 1e-6`
+  逐项比对质量指标，失败时 `actions/upload-artifact@v4` 上传 `/tmp/eval-gate.json`，
+  `gate-eval.yml:24-43`）。`ci.yml` 另外补了三样：`postgres` job 改用
+  `astral-sh/setup-uv@v5` + `uv sync --frozen --extra dev`，后续
+  `uv run --frozen alembic upgrade head` 与
+  `uv run --frozen pytest tests/test_migrations.py tests/test_concurrency.py -q`；
+  新增 `docker-build` job（matrix 两个镜像，用 `type=gha,scope=${{ matrix.image }},mode=max`
+  做缓存，注释写明"按镜像名分 scope 否则互相覆盖缓存层"，`push: false`）；
+  新增 `audit` job（`uv export --frozen --format requirements-txt --no-emit-project`
+  导出锁文件为 requirements，再用 `uvx pip-audit -r ... --no-deps` 扫描，
+  注释说明用 `uvx` 临时拉起是为了不让 pip-audit 进生产依赖树，而 pip-audit
+  发现漏洞默认非 0 退出，所以天然就是门禁）。
+- 替代方案与取舍：让 release 复用 CI 的 job，另一条路是"把步骤复制到 release.yml 里"，
+  放弃的理由就是 `gate-backend.yml` 注释里那句——复制出来的副本迟早和 CI 里的不一致；
+  第三条路是"release 里不再跑测试，只信任 tag 前的 CI 绿灯"，放弃是因为那等于把
+  "门禁通过"和"发布的内容"之间的对应关系交给人的记忆。
+  依赖安装用 `uv sync --frozen` 而不是 `pip install -e .`，取舍立刻可见：
+  锁文件过期时 CI 会**失败**，而不是悄悄联网解析出一个新版本——这是把 `uv.lock`
+  从装饰品变成事实来源的代价（代价就是升级依赖必须显式改锁文件）。
+  eval 门禁只比质量指标、**不比延迟**（`gate-eval.yml:4` 的注释：同机都会 ±10%，CI 更吵），
+  容差 1e-6 只用来吸收跨平台的 libm 浮点差异，真实回归至少在 0.01 量级——
+  也就是说这个门禁刻意做"宁可不报也不要误报"。覆盖率下限 80% 也不是新定的，
+  它是对着本地实测 86.7% 留的余量（`gate-backend.yml:36-37`）。
+- 新增测试：这一项没有传统意义上的单元测试,它的"测试"就是工作流本身在两个触发器下被加载和执行。
+  可被静态核对的部分：`gate-*.yml` 三个文件都声明 `on: workflow_call`；
+  `ci.yml` 与 `release.yml` 都用 `uses: ./.github/workflows/gate-*.yml` 引用同一份定义；
+  `release.yml` 的 `images` job 带 `needs: [backend, frontend, eval-gate]`；
+  `gate-eval.yml` 引用的两个脚本与两个 fixture 路径都在仓库里存在
+  （`scripts/run_golden_experiment.py`、`scripts/check_eval_regression.py`、
+  `tests/fixtures/eval_gate/corpus`、`tests/fixtures/eval_gate/golden.json`、
+  `tests/fixtures/eval_gate/baseline.json`）。
+- 验证命令及结果：**未在本地验证**。工作流要 GitHub Actions 才跑得起来，本机没有执行过
+  `ci.yml` / `release.yml` / `gate-*.yml` 的任何一步；`git diff` 只能证明文件内容，
+  证明不了"release.yml 能被 GitHub 解析"或"gate-eval 在 CI 上真的绿"。
+  可复现的相邻证据只有两条：`scripts.check_eval_regression` 在 `docs/code-review-2026-10-04.md`
+  §7 的快照里记录为 `exit 0，35 行指标全部 +0.0000`（那是第 1 梯队的本地运行，
+  不是本轮 CI 运行）；全量 `pytest` → **451 passed, 9 skipped** 是本轮的本地数字，
+  与 CI 上 backend 门禁的命令（`pytest -q --cov ... --cov-fail-under=80`）不完全相同
+  （本地没跑 `--cov`）。因此这一条在 §8 的表格里**不写成"已验证"**。
+- 仍存在的限制：`gate-eval.yml` 的夹具语料是 8 份合成文档 / 16 题，
+  它只能证明"质量指标没有被改坏"，不能证明"检索在真实语料上变好了"；
+  质量门禁容差 1e-6 意味着**任何**真实的指标下降都会被抓住，
+  但也意味着基线需要随每次有意的指标变化手工更新（本轮没有引入自动更新基线的机制）；
+  `docker-build` 只构建不推送、也不做镜像漏洞扫描（`audit` 扫的是 Python 依赖，
+  不扫基础镜像的 OS 包）；`audit` 用 `--no-deps` 只扫直接依赖，传递依赖里的漏洞不会被报出来；
+  frontend 门禁没有覆盖率下限，也没有 E2E（Playwright 之类）；
+  release 的 `images` job 只在三个门禁都有 job 的前提下成立——
+  一旦以后有人把某个 gate 重命名，`release.yml` 会因 `needs` 引用不存在的 job 而整体加载失败，
+  而这类错误只能在 GitHub 上被发现（本地没有 workflow 语法校验这一步）。
+
+## 已完成事项复盘（2026-10-07：API Key 换服务端会话与短期令牌）
+
+### 事项四十二：长期 API Key 每次请求都从浏览器发出，而它不可撤销、不会过期（后续项 A）
+
+- 根因：第 1 梯队把前端密钥的默认落点从 `localStorage` 改成了 `sessionStorage`（见事项三十五），
+  但**凭据本身没变**——它仍是配置里的长期共享密钥。后果有三条：
+  没有到期时间；要吊销只能轮换 `API_KEYS`（等于让所有客户端同时失效）；
+  服务端也没有任何"谁在什么时候用过"的记录，因为 `app/api/deps.py::authenticate`
+  只做一件事——拿 `X-API-Key` 去 `settings.api_keys` 里查租户。
+  于是 XSS、共享终端、浏览器同步任一条路径泄露的都是永久凭据，
+  而"最小权限/可撤销/可审计"这三件安全评审必问的事一件都答不上。
+- 设计选择：把密钥换成一个**服务端可撤销的会话对象**。浏览器先用密钥换一个
+  不透明随机令牌（`secrets.token_urlsafe(32)`，前缀 `ers_`，见 `app/core/sessions.py::new_session_token`），
+  之后一律发 `Authorization: Bearer ers_...`。
+  数据库只存 `sha256(token)`（`hash_token`），因为令牌是 256 bit 随机数、
+  穷举不可行，不需要 Argon2 这类慢 KDF；同表另存 16 位 `key_fingerprint`
+  用于回答"这是哪把密钥开的会话"，**长期密钥本身任何地方都不落库**。
+  行（`api_sessions` 表）带 `expires_at` / `revoked_at` / `last_used_at`，
+  所以过期、吊销、审计都只是对一行做条件 UPDATE。
+  - 端点：`POST /api/v1/auth/session`（`X-API-Key` → `{token, expires_at, expires_in, authenticated}`；
+    启用鉴权时必须持有有效密钥，body 里的 `tenant_id` 与密钥归属不符则 403）、
+    `GET /api/v1/auth/session`（token 自述）、`DELETE /api/v1/auth/session`（吊销自己）、
+    `GET /api/v1/auth/sessions`、`DELETE /api/v1/auth/sessions/{id}`（同租户审计与"吊销某台设备"，
+    后者跨租户返回 404）。
+  - `authenticate()` 变成"先 bearer 会话、后裸 `X-API-Key`"：服务端到服务端的调用方不用改一行。
+  - 令牌的凭据语义也进了限流身份（`app/middleware.py`：`session:<hash前16位>`），
+    否则所有会话会共享同一个客户端 IP 桶。
+  - `last_used_at` 按 `SESSION_TOUCH_SECONDS`（默认 60）节流写：
+    "审计要准"与"每个请求一次 UPDATE"之间取中；TTL 由 `SESSION_TTL_SECONDS`（默认 3600）控制。
+- 替代方案与取舍：**签名 JWT** 不必查库、水平扩展最省事，但吊销只能靠黑名单或短 TTL，
+  等于把刚解决的问题换个地方；也要求再引入一个"必须永远正确"的签名密钥。
+  **Redis 会话**读得快，但生产不一定要 Redis、多副本要共享同一份状态，
+  而审计记录本来就该落在已经有租户/文档关系的主库里。**HttpOnly Cookie**
+  能挡住 XSS 读令牌，但会引入 CSRF 面与跨域配置，且与现有"前端显式带 header"的调用方式冲突。
+  最终选了"不透明令牌 + 主库一行"，用一次带唯一索引的点查换掉一个不可撤销的共享密钥。
+  `AUTH_ENABLED=false` 时端点**照样发令牌**（租户取 body 或 `demo-enterprise`，`authenticated=false`）：
+  演示环境里 API 本来就是开放的，但让同一套前端代码在两种模式下都跑在"会到期的凭据"上，
+  比"关掉鉴权就连 token 都没有"更接近生产路径。
+- 新增测试：`tests/test_auth_sessions.py`（19 项）——交换成功返回 `ers_` 前缀与 TTL；
+  库里只有 hash 与 fingerprint（断言 token 不是行里的 `token_hash`、密钥不在 fingerprint 里）；
+  错密钥 401 + `WWW-Authenticate: ApiKey` 且不留行；bearer 能调受保护接口而裸密钥仍然可用；
+  无凭据 401；跨租户 403；未知令牌 401 `unknown session token`；
+  直接造一条 `expires_at` 已过的行 → 401 `expired`；登出后同一字符串 401 `revoked` 且 `revoked_at` 有值；
+  `last_used_at` 在一个区间内不被二次刷新；审计列表的 `current` 标记与 `include_revoked`；
+  跨租户吊销 404 且对方会话不受影响；同租户吊销后对方 401、自己 200；
+  `purge_api_sessions` 先删过期、两天后再删已吊销；`AUTH_ENABLED=false` 下令牌同样可吊销；
+  默认租户回退；body 租户与密钥不符 403。
+  另把 `api_sessions` 加进 `tests/test_models.py` 的期望表集合；
+  `tests/test_schema_parity.py` 会自动校验迁移与 `Base.metadata` 的表/列/索引集合一致
+  （这也钉住了"`unique=True, index=True` 只生成唯一索引、不生成表级 UNIQUE 约束"这个细节：
+  迁移里最初多写的 `UniqueConstraint` 会被它抓出来）。
+- 验证命令及结果：
+  - `pytest tests/test_auth_sessions.py tests/test_models.py tests/test_schema_parity.py` → **21 passed**；
+  - 全量 `pytest` → **470 passed, 9 skipped**（此前 451 passed，新增 19 项）；
+  - `ruff check app tests alembic scripts` → `All checks passed!`
+    （顺带修掉 `app/api/routes/auth.py` 里 8 处 B008：
+    `container: AppContainer = Depends(get_container)` 会触发 `function-call-in-default-argument`，
+    改成 `Annotated[AppContainer, Depends(get_container)]` 后干净——这也是 FastAPI 现在的推荐写法）；
+  - `mypy`（`files = ["app"]`）→ `Success: no issues found in 49 source files`；
+  - `alembic upgrade head` 在全新 SQLite 上建出 `api_sessions`（由 `tests/test_schema_parity.py`
+    与 `tests/test_migrations.py` 覆盖），已有 SQLite 库则由 `_upgrade_sqlite_schema()`
+    的 `create_all` 补建该表，不需要手写 ALTER。
+- 仍存在的限制：**API Key 本身仍是配置里的明文共享密钥**，轮换仍需改配置并重启，
+  也没有按密钥的独立审计——`docs/priority-fixes.md` 里"API Key 支持哈希存储、轮换、吊销和审计"
+  这一条只完成了后半（会话 token 的哈希存储、吊销、审计）。
+  令牌只在**签发它的那一份数据库**里有效（多副本共用一个 PostgreSQL 即可，SQLite 部署不行），
+  且每个请求都会查一次 `api_sessions`（有 `token_hash` 唯一索引）——没有进程内缓存，
+  所以刚吊销的令牌不会因为缓存而不生效。
+  `purge_api_sessions()` 已实现但**没有任何调度在调用它**（过期行会一直留在表里，
+  需要 Celery beat 或运维脚本定期跑）。
+  前端把令牌放在 `sessionStorage`（隐私模式降级为仅内存）而非 HttpOnly Cookie，
+  所以 XSS 仍能拿走"当前标签页内有效"的令牌——只是拿不到长期密钥，且能被立刻吊销。
+  没有刷新/续期机制：TTL 到了必须重新用密钥换一次。
+
 ## P1：可靠性与安全
 
 - [x] **修正 `document_version` 默认值与多版本语料的语义冲突**（2026-09-26 发现，2026-10-04 完成，见事项二十六）
@@ -934,8 +1492,8 @@
 - [ ] 校验文件 magic/MIME，并为 PDF/DOCX 解析设置超时、内存限制和任务 time limit。
 - [ ] 建立租户存储配额与原始文件清理/归档策略。
 - [x] Celery 使用原子状态迁移或分布式锁，防止两个 Worker 同时处理同一文档。（2026-09-27 完成）
-- [ ] 为外部索引写入设计 generation/outbox/可重放机制，处理 PostgreSQL 与检索后端双写一致性。
-- [ ] API Key 支持哈希存储、轮换、吊销和审计。
+- [x] 为外部索引写入设计 generation/outbox/可重放机制，处理 PostgreSQL 与检索后端双写一致性。（2026-10-07 完成，见事项三十六）
+- [x] 会话令牌支持哈希存储、吊销与审计（2026-10-07 完成，见事项四十二；长期 API Key 本身的哈希存储与轮换仍未做）。
 
 ## P1：性能与数据模型
 
@@ -949,10 +1507,10 @@
     同一语料被嵌入两遍（profile 实测每查询 `embed()` 634 次 = 316 × 2）。
   - 验收：改造后在同一脚本重跑，给出改造前后 p50/p95 对照（推断量级：sparse ~280 ms、hybrid ~700 ms）。
 - [x] async 路由改用 AsyncSession、`redis.asyncio`，避免同步 I/O 阻塞事件循环。（2026-09-27 完成缓存/限流与存储调用部分；AsyncSession 未做）
-- [ ] 状态字段增加 Enum/CheckConstraint，评测参数和结果在 PostgreSQL 使用 JSONB。
-- [ ] 补齐外键、级联删除和数据库级跨租户一致性约束。
+- [x] 状态字段增加 Enum/CheckConstraint，评测参数和结果在 PostgreSQL 使用 JSONB。（2026-10-07 完成，见事项三十七）
+- [x] 补齐外键、级联删除和数据库级跨租户一致性约束。（2026-10-07 完成，见事项三十七；跨租户只做到删除语句带 `tenant_id` 条件，未做库级行级安全）
 - [x] 统一 Alembic Schema 演进，减少 SQLite 手写升级逻辑。（2026-09-27 完成）
-- [ ] 补齐所有 migration downgrade 或明确采用 forward-only 策略。
+- [x] 补齐所有 migration downgrade 或明确采用 forward-only 策略。（2026-10-07 完成，见事项四十；`0011`/`0012` 的 downgrade 都已实现并幂等，逐版本 downgrade 由 `tests/test_migrations.py` 守着）
 
 ## P1：评测、可观测性与 CI
 
@@ -993,15 +1551,15 @@
   - 仍存在的限制：应拒答的"该不该拒"目前只由检索是否为空近似，答案层的拒答正确率尚未纳入；
     多跳的 nDCG 按跳平均，没有做位置重复折扣（多跳 nDCG 本身没有公认口径）。
 - [ ] 评测 Runner 增加有界并发、单样例超时、进度、checkpoint、失败样例重试和取消能力。
-- [ ] 接入标准 Prometheus Histogram/Counter，并覆盖 Cache、Retrieval、Celery、DB Pool 指标。
+- [x] 接入标准 Prometheus Histogram/Counter，并覆盖 Cache、Retrieval、Celery、DB Pool 指标。（2026-10-07 完成，见事项三十八）
 - [ ] LangSmith 关闭时将 Trace 持久化到结构化日志、数据库或 OpenTelemetry Collector。
-- [ ] Readiness 根据启用配置检查 DB、Redis、任务队列及外部检索后端。
-- [ ] CI 增加 PostgreSQL/Redis、Alembic、Celery、Docker Compose、类型检查、覆盖率和依赖/镜像扫描。
+- [x] Readiness 根据启用配置检查 DB、Redis、任务队列及外部检索后端。（2026-10-07 完成，见事项三十八）
+- [x] CI 增加 PostgreSQL/Redis、Alembic、Celery、Docker Compose、类型检查、覆盖率和依赖/镜像扫描。（2026-10-07 完成，见事项四十一；Redis/Celery 仍是既有 job 内的 fake/契约测试，`docker-build` 只构建不推送、不扫镜像 OS 包，"镜像扫描"只覆盖 Python 依赖）
 
 ## P2：部署演进
 
 - [ ] Production Compose 使用固定 tag/SHA 的已发布镜像，不在服务器现场构建。
-- [ ] 上传文件迁移到 S3/MinIO 等对象存储，解除 API/Worker 共享本地卷限制。
+- [x] 上传文件迁移到 S3/MinIO 等对象存储，解除 API/Worker 共享本地卷限制。（2026-10-07 完成，见事项三十九；compose 里的 `uploads_data` 卷已换成 `minio_data`，默认后端仍是本地，需 `OBJECT_STORE=s3` 才切）
 - [ ] PostgreSQL/Redis 使用托管或高可用方案，并验证备份、PITR 与恢复演练。
 - [ ] 增加 staging 自动部署、production 审批、回滚及数据库迁移策略。
 

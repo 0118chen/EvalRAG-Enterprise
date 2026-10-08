@@ -196,9 +196,11 @@ curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 - Evaluation 创建、状态、结果和基线对比接口。
 - 前端支持 Dataset 编辑、实验配置、异步进度、指标卡片、逐题结果和基线差值。
 - 前端拆分为 `frontend/src/components/` 下的 8 个面板组件 + 3 个可测模块（`sse.ts` 流式分帧、
-  `auth.ts` 凭据存储、`metrics.ts` 指标标签与格式），由 `npm test`（vitest，32 项）覆盖；
-  API Key 默认只在当前页面内存中，勾选"在本标签页内记住密钥"后写入 sessionStorage，
-  关掉标签页即失效，历史上写进 localStorage 的旧键在加载时被删除而不迁移。
+  `auth.ts` 凭据存储、`metrics.ts` 指标标签与格式），由 `npm test`（vitest）覆盖；
+  **API Key 不再落任何浏览器存储**：登录时用它换一个会话令牌，令牌只放在 sessionStorage
+  （默认勾选"在本标签页内保持登录"，取消勾选则仅内存、刷新需重新登录；隐私模式下自动降级为仅内存），
+  关掉标签页即失效；历史上写进 localStorage/sessionStorage 的旧密钥
+  在加载时被删除而不迁移。
 
 ### 阶段五：企业级检索
 
@@ -214,12 +216,18 @@ curl -H "X-Health-Token: $HEALTH_ADMIN_TOKEN" https://your-host/health/llm
 
 - PostgreSQL 运行时存储与 Alembic 迁移。
 - Redis 缓存、限流和 Celery Broker。
-- API Key 认证和租户绑定。
+- API Key 认证和租户绑定；浏览器不再长期持有这把密钥——它只用来换一个**服务端会话令牌**
+  （`POST /api/v1/auth/session`，`X-API-Key` → `ers_...`），此后所有请求发 `Authorization: Bearer ers_...`。
+  令牌有 TTL（`SESSION_TTL_SECONDS`，默认 3600）、可吊销（`DELETE /api/v1/auth/session`）、
+  可审计（`GET /api/v1/auth/sessions`，含 `last_used_at` 与 `key_fingerprint`），
+  库里只存 `sha256(token)`；服务端到服务端的调用方仍可直接用 `X-API-Key`。
 - 固定窗口限流，支持 Memory/Redis 后端。
 - Nginx HTTPS、HSTS 和反向代理配置。
 - Staging/Production Compose、GitHub Actions CI/CD。
 - PostgreSQL 备份与恢复脚本。
 - `/health/live`、`/health/ready` 和 Prometheus `/metrics`。
+- 可靠性保障：外部索引写入走 `index_outbox`（与摄取同一事务落 intent，重试预算记在行上，可按行回放与 sweep；见 `docs/priority-fixes.md` 事项三十六）；状态字段有库级 `CheckConstraint`、评测参数/结果在 PostgreSQL 上是 JSONB、内容表随语料级联删除而评测历史保留；每个 API/Worker 副本启动时的 `alembic upgrade head` 由 PostgreSQL advisory lock 串行化（`EVALRAG_MIGRATION_LOCK=0` 可关闭）。
+- 上传文件走可插拔对象存储：本地目录（默认，`OBJECT_STORE=local`）或 S3/MinIO（`OBJECT_STORE=s3` + `S3_*`），下载接口在 S3 上返回 307 预签名 URL、在本地后端直接返回字节。
 - 外部连通检查（`/health/llm`、`/health/langsmith`）需要管理令牌，非开发环境未配置令牌时直接失败。
 - LangSmith Dataset 远端名称按租户命名空间隔离。
 
@@ -280,8 +288,17 @@ docker compose up --build
 
 - 前端：`http://localhost:8080`
 - API 文档：`http://localhost:8000/docs`
+- MinIO 控制台：`http://localhost:9001`（`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`，默认 `evalrag` / `evalrag-secret`）
 
 Compose 会先执行 `alembic upgrade head`，然后启动 API 和 Worker。
+
+上传文件默认已不落本地卷：compose 里会起 MinIO 与一次性的 `createbuckets` 服务，并把 API/Worker 的
+`OBJECT_STORE` 设为 `s3`、`S3_ENDPOINT_URL` 指向 `http://minio:9000`。`S3_PUBLIC_ENDPOINT_URL`
+额外设成 `http://localhost:${MINIO_PORT:-9000}`，因为下载接口返回的是**给浏览器**的预签名 URL，
+里面的主机名必须是浏览器能解析的地址，而 `minio` 只在 compose 网络里可解析。若要用自己的 S3/OSS，
+改 `S3_ENDPOINT_URL`、`S3_BUCKET`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`（`S3_PATH_STYLE` 视服务商而定）
+并把 `OBJECT_STORE` 保持为 `s3`；不设 `OBJECT_STORE=s3` 时会退回本地目录（`OBJECT_STORE_LOCAL_DIR`）。
+本地后端不支持预签名，下载接口会退化成由 API 进程流式返回字节。
 
 PowerShell 可覆盖宿主机端口：
 
@@ -332,9 +349,23 @@ RATE_LIMIT_BACKEND=redis
 DENSE_RETRIEVAL_BACKEND=milvus
 SPARSE_RETRIEVAL_BACKEND=elasticsearch
 EMBEDDING_PROVIDER=openai-compatible
+OBJECT_STORE=s3
 ```
 
+`OBJECT_STORE=s3` 时还需设置 `S3_ENDPOINT_URL`、`S3_BUCKET`、`S3_REGION`、`S3_ACCESS_KEY`、
+`S3_SECRET_KEY`（如用兼容 S3 的对象存储需按厂商设置 `S3_PATH_STYLE`），以及
+`S3_PUBLIC_ENDPOINT_URL`——预签名 URL 里的主机名必须是**客户端**能解析的地址，
+所以不能填只在内网可解析的 endpoint；不设置时预签名 URL 会指向 `S3_ENDPOINT_URL`。
+`S3_PRESIGN_SECONDS` 控制 URL 有效期（默认 300 秒，签发后无法提前吊销）。
+
 Production Compose **不会**创建 Milvus 或 Elasticsearch。生产部署必须另外提供 API/Worker 均可访问的 Milvus、Elasticsearch 和 OpenAI-compatible embedding 服务，并设置对应 URI、认证、collection/index、模型及 `EMBEDDING_DIMENSIONS`。首次切换后端、embedding 模型或维度后，对每个已 ready 文档执行 `python -m app.cli reindex-document <document_id> --force`；该命令先按文档删除外部旧索引，再写入新索引。建议生产保持 `EXTERNAL_RETRIEVAL_FALLBACK=false`，避免外部后端配置/schema/auth 错误被本地结果掩盖；若显式开启，只有连接/超时类不可用错误会降级。
+
+Staging 与 Production Compose 会自己起一个 MinIO 服务（`minio` + 一次性的 `createbuckets`），
+并把 API/Worker 的 `OBJECT_STORE` 固定为 `s3`、`S3_ENDPOINT_URL` 指向 `http://minio:9000`。
+这两个文件里的 `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`S3_PUBLIC_ENDPOINT_URL` 用了
+`${VAR:?set ...}` 写法：**不设置就拒绝启动**，而不是退回一个众所周知的默认口令——
+生产栈悄悄用默认密码比直接起不来更糟。`S3_PUBLIC_ENDPOINT_URL` 必须是浏览器可达的
+对象存储地址（例如 `https://objects.example.com`），因为下载接口会把预签名 URL 交给客户端。
 
 ## 备份与恢复
 
@@ -358,9 +389,27 @@ Windows PowerShell：
 
 ```bash
 ruff check app tests alembic scripts
-pytest -q
+pytest -q                      # 470 passed, 9 skipped（本机无 PostgreSQL，9 个 skip 全是环境限制）
+pytest tests/test_storage.py tests/test_upload_streaming.py tests/test_tasks.py
+                               # 52 passed（对象存储 + outbox 回放的专项口径）
+uv sync --frozen --extra dev   # 完全按 uv.lock 安装（CI 的第一道门禁）
+uv lock --check                # 锁文件与 pyproject.toml 是否一致
 cd frontend && npm run build   # vue-tsc --noEmit + vite build
-cd frontend && npm test        # vitest：SSE 分帧、密钥存储、指标格式、两个面板（32 项）
+cd frontend && npm run lint && npm run format:check
+cd frontend && npm test        # vitest：SSE 分帧、令牌存储、指标格式、三个面板 + App mount（44 项）
 ```
+
+CI 里同样的门禁还包含 `mypy`、`pytest --cov=app --cov-fail-under=80`、镜像构建
+（`docker build`，不推送）与依赖漏洞扫描（`uvx pip-audit`），定义在
+`.github/workflows/gate-backend.yml`、`gate-frontend.yml`、`gate-eval.yml`，由 `ci.yml` 与
+`release.yml` 共同调用；`gate-eval.yml` 会用仓库内的夹具语料跑一遍真实链路，
+再与提交的基线逐项比对质量指标（比的是指标、不是延迟）。
+
+上面 `pytest`、`ruff`、`mypy` 与前端四条命令的数字都取自 2026-10-08 的本地运行
+（`ruff → All checks passed!`、`mypy → Success: no issues found in 49 source files`、
+`npm test → 44 passed / 6 files`、`lint`/`format:check`/`vue-tsc --noEmit` 全部 exit 0），
+第 2 梯队中"未在本地执行过"的部分（GitHub Actions 工作流、`docker compose up`、
+真实 Milvus/Elasticsearch/MinIO/Redis、`npm run build`）在
+[`docs/code-review-2026-10-04.md`](docs/code-review-2026-10-04.md) 的 §8/§9 里逐条列出。
 
 LangSmith 仅发送脱敏 metadata、问题文本、文档 ID、页码和受控摘要，不上传完整原文。
