@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     )
     auth_enabled: bool = False
     api_keys: dict[str, str] = Field(default_factory=dict)
+    # The browser exchanges the long-lived API key for a short-lived session token at
+    # POST /api/v1/auth/session and then sends `Authorization: Bearer <token>`. One hour is
+    # short enough that a stolen token goes stale on its own, and long enough that a normal
+    # working session is not interrupted; the session can also be revoked explicitly.
+    session_ttl_seconds: int = 3600
+    # Recording "last used" on every single request would double the writes a read-only
+    # page makes, so it is refreshed at most this often (and only when the value is
+    # actually older, which keeps a busy session from writing at all).
+    session_touch_seconds: int = 60
     rate_limit_enabled: bool = False
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
@@ -71,12 +80,46 @@ class Settings(BaseSettings):
     evaluation_example_timeout_seconds: float = 120.0
     evaluation_inline_fallback: bool = False
     max_upload_mb: int = 50
+    # Uploads used to be written to a local directory that the API and the worker both had to
+    # mount. That pins the whole deployment to one machine: a second worker on another host
+    # cannot see what the API wrote, and a container restart in the middle of an upload loses
+    # the bytes while the row still says "queued". "local" stays the default so a laptop needs
+    # no extra service, but "s3" (MinIO, AWS S3, anything S3-compatible) puts the object
+    # store behind a contract both sides use, and lets the API hand the browser a short-lived
+    # URL instead of streaming the file through itself.
+    object_store: str = "local"
+    object_store_local_dir: str = "data/uploads"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str = "evalrag"
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    # MinIO and most self-hosted gateways only answer path-style requests
+    # (``http://host/bucket/key``); AWS accepts both, so the safe default is path style.
+    s3_path_style: bool = True
+    # A presigned URL is opened by the *browser*, so the host inside it must be reachable from
+    # the client - which is usually not the host the API talks to (``http://minio:9000`` inside
+    # a compose network, ``https://objects.example.com`` outside it). Set this when the two
+    # differ; leave it empty to sign with the same endpoint the API itself uses.
+    s3_public_endpoint_url: str | None = None
+    # A presigned URL is a bearer token for one object: anyone holding it can read that file
+    # until it expires. Five minutes is long enough for a click and short enough that a URL
+    # leaked through a proxy log or a shared screen is worthless.
+    s3_presign_seconds: int = 300
     ocr_backend: str = "none"
     ocr_command: str = "tesseract"
     ocr_language: str = "chi_sim+eng"
     ocr_max_pages: int = 20
     health_checks_public: bool = False
     health_admin_token: str | None = None
+    # Readiness probes a Redis ping, the Celery broker and the queue backlog; each of those
+    # is a network round trip to a dependency that may be down, so the readiness endpoint
+    # needs its own bound. Without one a hung broker turns `/health/ready` into a hang and
+    # the orchestrator restarts a pod that was only waiting on a probe.
+    readiness_timeout_seconds: float = 2.0
+    # A backlog at or below this is normal (a consumer between polls); above it the queue is
+    # not being drained, which is worth reporting as degraded even though the broker answers.
+    queue_backlog_threshold: int = 0
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

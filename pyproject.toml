@@ -7,7 +7,26 @@ name = "evalrag-enterprise"
 version = "0.1.0"
 description = "An evaluation-driven multi-tenant enterprise RAG platform"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.32,<1", "httpx>=0.28,<1", "pydantic-settings>=2.7,<3", "langsmith>=0.3.13,<1", "python-multipart>=0.0.18,<1", "pymupdf>=1.25,<2", "python-docx>=1.1,<2", "openpyxl>=3.1,<4", "pymilvus>=2.5,<3", "elasticsearch[async]>=8.17,<10", "celery[redis]>=5.4,<6", "redis>=5.2,<7", "sqlalchemy[asyncio]>=2.0,<3", "asyncpg>=0.30,<1", "psycopg[binary]>=3.2,<4", "alembic>=1.14,<2"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.32,<1",
+    "httpx>=0.28,<1",
+    "pydantic-settings>=2.7,<3",
+    "langsmith>=0.3.13,<1",
+    "python-multipart>=0.0.18,<1",
+    "pymupdf>=1.25,<2",
+    "python-docx>=1.1,<2",
+    "openpyxl>=3.1,<4",
+    "pymilvus>=2.5,<3",
+    "elasticsearch[async]>=8.17,<10",
+    "celery[redis]>=5.4,<6",
+    "redis>=5.2,<7",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "asyncpg>=0.30,<1",
+    "psycopg[binary]>=3.2,<4",
+    "alembic>=1.14,<2",
+    "boto3>=1.35,<2",
+]
 
 [project.scripts]
 evalrag = "app.cli:main"
@@ -57,8 +76,9 @@ strict_equality = true
 show_error_codes = true
 
 # These ship no py.typed marker, so mypy has nothing to check against: celery backs the
-# worker, sentence_transformers the cross-encoder reranker, pymilvus the vector backend
-# and openpyxl the spreadsheet reader. Every one of them is an optional code path.
+# worker, sentence_transformers the cross-encoder reranker, pymilvus the vector backend,
+# openpyxl the spreadsheet reader and boto3 the S3 client. Every one of them is an optional
+# code path (boto3 is typed by a separate stubs package, not by the library itself).
 [[tool.mypy.overrides]]
 module = [
     "celery.*",
@@ -67,6 +87,10 @@ module = [
     "pymilvus.*",
     "openpyxl",
     "openpyxl.*",
+    "boto3",
+    "boto3.*",
+    "botocore",
+    "botocore.*",
 ]
 ignore_missing_imports = true
 

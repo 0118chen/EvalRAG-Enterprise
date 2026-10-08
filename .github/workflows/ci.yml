@@ -6,26 +6,11 @@ on:
   pull_request:
 
 jobs:
+  # backend / frontend / eval-gate 三个门禁的步骤定义放在 gate-*.yml 里
+  # （可复用工作流），release.yml 调用的是同一份定义。GitHub 的 `needs` 不能跨
+  # 工作流文件引用 job，所以这是"发布必须等门禁"的唯一不靠复制粘贴的实现方式。
   backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -e ".[dev]"
-      # The lockfile used to be decoration: nothing read it, so it could drift away from
-      # pyproject.toml unnoticed. Installing still goes through pip (the lock pins exact
-      # versions, the ranges above stay the contract), but drift now fails the build.
-      - uses: astral-sh/setup-uv@v5
-      - name: Lockfile matches pyproject.toml
-        run: uv lock --check
-      - run: ruff check app tests alembic scripts
-      - run: mypy
-      # The floor is 80% against 86.7% measured locally (stdlib `trace --count --missing`),
-      # so it fails on a real drop rather than on noise.
-      - run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
+    uses: ./.github/workflows/gate-backend.yml
 
   # 生产跑的是 PostgreSQL，但并发断言（"同一份文档只会被一个 worker 认领"）在
   # 内存 SQLite 上无法验证。这个 job 用真的 PostgreSQL 服务容器跑迁移和并发测试：
@@ -53,63 +38,68 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-      - run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync the locked environment
+        run: uv sync --frozen --extra dev
       - name: Migrate the database
-        run: alembic upgrade head
+        run: uv run --frozen alembic upgrade head
       - name: Migrations are reversible and rows are claimed exactly once on PostgreSQL
         env:
           EVALRAG_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/evalrag
-        run: pytest tests/test_migrations.py tests/test_concurrency.py -q
+        run: uv run --frozen pytest tests/test_migrations.py tests/test_concurrency.py -q
 
-  # 前端 job 不只做构建：SSE 分帧（后端按帧发 token，跨 chunk 的半个帧不能被吞掉）
-  # 与 API Key 存储（密钥曾长期留在 localStorage）这两处出问题，Python 测试里看不见。
   frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
-      - run: npm test
+    uses: ./.github/workflows/gate-frontend.yml
 
-  # 检索质量门禁：单元测试只能证明"代码按预期跑"，证明不了"召回没有被改坏"。
-  # 这里用一份提交进仓库的小夹具语料（8 份合成文档 / 16 题）跑真实链路，
-  # 再把每个质量指标与基线逐项比对；延迟不设门禁（同机都会 ±10%，CI 更吵）。
-  # 容差 1e-6 只用于吸收跨平台的 libm 浮点差异——真实回归至少在 0.01 量级。
   eval-gate:
+    uses: ./.github/workflows/gate-eval.yml
+
+  # 新增：镜像到底能不能构建。release.yml 只在打 tag 时才 build，而 Dockerfile
+  # （或它 COPY 的文件）坏掉通常是平时的提交引入的——等打 tag 那天才发现，
+  # tag 已经推出去了。这里在每次 push/PR 就构建一次作为冒烟检查。
+  # 全程不登录、不推送、不需要任何密钥；buildx 的 GitHub Actions 缓存让第二次起变快。
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: evalrag-api
+            context: .
+            file: Dockerfile
+          - image: evalrag-frontend
+            context: frontend
+            file: Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          # 两个镜像如果共用 type=gha 的默认 scope，会互相覆盖缓存层，所以按镜像名分 scope。
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  # 新增：依赖漏洞审计。uv.lock 已经把每个版本钉死，所以审计对象就是锁文件本身：
+  # 先用 `uv export` 把锁文件导成 requirements-txt（--no-emit-project 去掉本仓库自身，
+  # 免得去审计一个本地包），再交给 pip-audit。pip-audit 用 uvx 临时拉起，不写进
+  # pyproject 依赖——审计工具自己不该进生产依赖树。
+  # --no-deps：导出的文件已经是完整闭包，不需要 pip-audit 再解析一遍依赖（更快也更确定）；
+  # pip-audit 默认在发现漏洞时以非 0 退出，所以这步天然是门禁。
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - name: Run the pipeline on the fixture corpus
-        run: |
-          python -m scripts.run_golden_experiment \
-            --corpus tests/fixtures/eval_gate/corpus \
-            --golden tests/fixtures/eval_gate/golden.json \
-            --configs sparse-bm25,dense-hash,hybrid-rrf,hybrid-convex-weighted,hybrid-convex-weighted-rerank \
-            --json /tmp/eval-gate.json \
-            --database /tmp/eval-gate.db
-      - name: Compare quality metrics against the committed baseline
-        run: |
-          python -m scripts.check_eval_regression \
-            --baseline tests/fixtures/eval_gate/baseline.json \
-            --current /tmp/eval-gate.json \
-            --tolerance 1e-6
-      - name: Upload the report when the gate fails
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: eval-gate-report
-          path: /tmp/eval-gate.json
+          enable-cache: true
+      - name: Export the locked dependencies
+        run: >-
+          uv export --frozen --format requirements-txt --no-emit-project
+          --output-file /tmp/audit-requirements.txt
+      - name: Audit the locked dependencies for known vulnerabilities
+        run: uvx pip-audit -r /tmp/audit-requirements.txt --no-deps

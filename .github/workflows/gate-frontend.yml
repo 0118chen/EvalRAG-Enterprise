@@ -1,0 +1,28 @@
+# 可复用工作流（workflow_call）：frontend 门禁的定义只写一遍（理由见 gate-backend.yml）。
+# 前端 job 不只做构建：SSE 分帧（后端按帧发 token，跨 chunk 的半个帧不能被吞掉）
+# 与 API Key 存储（密钥曾长期留在 localStorage）这两处出问题，Python 测试里看不见。
+name: gate-frontend
+
+on:
+  workflow_call:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # 静态检查先跑：eslint 查代码问题，prettier 只校验排版（不写文件），
+      # 两者都比构建便宜，出问题时能更早失败。
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm test

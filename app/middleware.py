@@ -9,6 +9,7 @@ from starlette.requests import Request
 
 from app.container import AppContainer
 from app.core.metrics import normalize_path
+from app.core.sessions import bearer_token, hash_token
 
 # Cheap endpoints that must not consume the rate limit budget: orchestrator
 # probes, Prometheus scraping and the docs page. Everything else, including the
@@ -90,6 +91,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         api_key = request.headers.get("X-API-Key")
         identity = container.settings.api_keys.get(api_key or "")
+        if not identity:
+            # A session token is per-session, not per-tenant, so its bucket is keyed by the
+            # token itself (hashed, never logged). Minting one already required a valid
+            # long-lived key, so this cannot be used to escape the limit: an attacker who
+            # can mint sessions can also send the key directly.
+            token = bearer_token(request.headers.get("Authorization"))
+            if token:
+                identity = f"session:{hash_token(token)[:16]}"
         if not identity:
             identity = request.client.host if request.client else "unknown"
         decision = await limiter.check(identity)

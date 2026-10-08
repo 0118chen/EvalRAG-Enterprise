@@ -1,0 +1,39 @@
+# 可复用工作流（workflow_call）：backend 门禁的定义只写一遍。
+# ci.yml 每次 push/PR 调它，release.yml 在打 tag 时也调它——GitHub 的 `needs`
+# 不能跨工作流文件引用 job，所以"发布要等门禁通过"只能靠复用同一份定义实现，
+# 而不是把步骤复制到 release.yml（复制出来的副本迟早和 CI 里的不一致）。
+name: gate-backend
+
+on:
+  workflow_call:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # setup-uv 自己会缓存 uv 的 cache 目录，所以不再需要 setup-python 的 `cache: pip`。
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # uv.lock 从"装饰品"变成事实来源：--frozen 表示完全按锁文件装，锁文件与
+      # pyproject.toml 不一致时 uv 直接报错退出，而不是悄悄联网重新解析一遍。
+      # extra 名取自 pyproject.toml 的 [project.optional-dependencies]：dev。
+      - name: Sync the locked environment
+        run: uv sync --frozen --extra dev
+      # --frozen 已经会因锁文件过期而失败，这一步只是把失败原因说得更直白。
+      - name: Lockfile matches pyproject.toml
+        run: uv lock --check
+      # 用 `uv run --frozen` 而不是裸 `ruff`/`pytest`：命令跑在刚同步出来的
+      # .venv 里，而且 `uv run` 不会因为版本漂移而回写 uv.lock。
+      - name: Lint
+        run: uv run --frozen ruff check app tests alembic scripts
+      - name: Type check
+        run: uv run --frozen mypy
+      # 覆盖率下限 80% 是对着本地实测 86.7%（stdlib `trace --count --missing`）留的余量，
+      # 所以它会在真实下降时失败，而不是被噪声触发。
+      - name: Test with coverage
+        run: uv run --frozen pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80

@@ -9,6 +9,17 @@ RetrievalMode = Literal["dense", "sparse", "hybrid"]
 EvidenceMode = Literal["all", "any"]
 VERSION_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 
+# The values the database CHECK constraints allow. The constraint itself lives in
+# `app/db/models.py` (`DOCUMENT_STATUSES` / `EVALUATION_STATUSES`); schemas does not import
+# the storage layer, so `tests/test_schema_constraints.py` pins the two together instead of
+# letting them drift. Typing them here means a typo fails validation with a 422 that names
+# the allowed values, rather than writing a row no query for a real status can ever find.
+DocumentStatus = Literal["pending", "processing", "ready", "failed", "needs_ocr"]
+EvaluationStatus = Literal["queued", "running", "completed", "failed"]
+# The external-index outbox (`INDEX_JOB_STATUSES` / `INDEX_JOB_OPERATIONS` in models.py).
+IndexJobStatus = Literal["pending", "processing", "done", "failed"]
+IndexJobOperation = Literal["upsert", "delete"]
+
 # `document_version` selects which labelled slice of a knowledge base to search.
 # None (or a blank string) means "no version filter", i.e. every version. It must not
 # default to the literal "latest": "latest" is merely the *label* a document gets when
@@ -188,7 +199,7 @@ class EvaluationJob(BaseModel):
     experiment_name: str | None = None
     baseline_evaluation_id: str | None = None
     parameters: dict = Field(default_factory=dict)
-    status: str
+    status: EvaluationStatus
     results: dict | None = None
     error_message: str | None = None
     created_at: datetime | None = None
@@ -200,7 +211,71 @@ class Document(BaseModel):
     filename: str
     knowledge_base_id: str
     chunks: int
-    status: str = "ready"
+    status: DocumentStatus = "ready"
     progress: int = Field(default=100, ge=0, le=100)
     error_message: str | None = None
     version: str = Field(default="latest", pattern=VERSION_PATTERN)
+
+
+class IndexJob(BaseModel):
+    """One row of the external-index outbox: what the search index still owes."""
+
+    id: str
+    document_id: str
+    knowledge_base_id: str
+    operation: IndexJobOperation = "upsert"
+    status: IndexJobStatus = "pending"
+    attempts: int = 0
+    last_error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ApiSession(BaseModel):
+    """A stored session row. `token_hash` never leaves the server."""
+
+    id: str
+    tenant_id: str
+    token_hash: str
+    key_fingerprint: str = ""
+    created_at: datetime | None = None
+    expires_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class SessionToken(BaseModel):
+    """What the exchange endpoint hands the browser: a short-lived bearer token."""
+
+    token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    tenant_id: str
+    expires_at: datetime
+    expires_in: int
+    # False when AUTH_ENABLED is off: the token is still a session (with an expiry the
+    # operator can revoke), it just was not won by presenting a long-lived key.
+    authenticated: bool
+
+
+class SessionRequest(BaseModel):
+    """Optional body of the exchange call.
+
+    With AUTH_ENABLED on the tenant comes from the API key, and naming a different one is
+    a 403. With it off there is no key to read a tenant from, so the caller says which
+    tenant it is working as.
+    """
+
+    tenant_id: str | None = Field(default=None, max_length=128)
+
+
+class SessionInfo(BaseModel):
+    """A session as an operator sees it: identity and lifecycle, never the secret."""
+
+    id: str
+    tenant_id: str
+    key_fingerprint: str = ""
+    created_at: datetime | None = None
+    expires_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+    current: bool = False

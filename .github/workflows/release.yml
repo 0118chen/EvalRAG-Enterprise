@@ -9,7 +9,30 @@ permissions:
   packages: write
 
 jobs:
+  # 发布门禁：GitHub 的 `needs` 只能引用同一个工作流文件里的 job，不能写成
+  # `needs: [backend, frontend, eval-gate]` 去引用 ci.yml 里的 job——那样 release.yml
+  # 会直接因为"引用了不存在的 job"而无法加载。所以这里用 gate-*.yml（和 ci.yml 里
+  # backend / frontend / eval-gate 调用的是同一份可复用工作流定义）把三个 id 真实地
+  # 建出来，下面 images 才能 needs 它们。步骤只有一份定义，不存在两处漂移。
+  backend:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gate-backend.yml
+
+  frontend:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gate-frontend.yml
+
+  eval-gate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gate-eval.yml
+
+  # 只有三个门禁都绿了才构建并推送镜像：打 tag 不再等于"自动发布"，
+  # 一个红的门禁会让整个 release 工作流失败，镜像不会进 ghcr.io。
   images:
+    needs: [backend, frontend, eval-gate]
     runs-on: ubuntu-latest
     strategy:
       matrix:

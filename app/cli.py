@@ -7,7 +7,7 @@ from app.container import build_container
 from app.core.evaluation_runner import EvaluationRunner
 from app.core.langsmith_eval import dataset_example
 from app.core.llm import create_llm
-from app.tasks import process_document
+from app.tasks import process_document, replay_index_outbox
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reindex_parser.add_argument("document_id")
     reindex_parser.add_argument("--force", action="store_true")
+    replay_parser = subparsers.add_parser(
+        "replay-index-outbox",
+        help="retry the external index writes that never completed; safe to run on a timer",
+    )
+    replay_parser.add_argument("--limit", type=int, default=10)
     return parser
 
 
@@ -41,6 +46,15 @@ def main() -> None:
         print(f"{result['document_id']} {result['status']} {result['stage']}")
         if result.get("stage") == "already_indexed" and not args.force:
             print("document is already indexed; pass --force to rebuild it")
+        return
+    if args.command == "replay-index-outbox":
+        function = (
+            replay_index_outbox.run
+            if hasattr(replay_index_outbox, "run")
+            else replay_index_outbox
+        )
+        result = function(args.limit)
+        print(f"replayed={result['replayed']} failed={result['failed']}")
         return
     if args.command == "run-evaluation":
         runner = EvaluationRunner(

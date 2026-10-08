@@ -23,8 +23,13 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     from sqlalchemy import engine_from_config, pool
+
+    from app.db.migration_lock import migration_lock
+
     connectable = engine_from_config(config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool)
-    with connectable.connect() as connection:
+    # Every API/worker replica migrates on boot; on PostgreSQL the advisory lock serializes
+    # those replicas so two of them cannot apply the same revision at the same time.
+    with migration_lock(connectable), connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

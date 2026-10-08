@@ -28,6 +28,50 @@ services:
     volumes:
       - redis_data:/data
 
+  # Uploads live in an object store rather than on a volume the API and the worker both mount:
+  # that is what lets the two run on different hosts, and what lets the API answer a download
+  # with a URL instead of streaming the file itself.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-evalrag}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-evalrag-secret}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot bucket creation, in the same spirit as the `migrate` service: the stack should be
+  # usable straight after `docker compose up`, not after a manual click in a console.
+  createbuckets:
+    image: minio/mc:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-evalrag}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-evalrag-secret}
+      S3_BUCKET: ${S3_BUCKET:-evalrag}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          sleep 1
+        done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+    healthcheck:
+      disable: true
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
   migrate:
     build: .
     env_file: .env
@@ -49,16 +93,27 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://evalrag:evalrag@postgres:5432/evalrag
+      OBJECT_STORE: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      # The browser opens the presigned URL, so it must name a host the browser can reach;
+      # `minio` only resolves inside this network.
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:${MINIO_PORT:-9000}
+      S3_BUCKET: ${S3_BUCKET:-evalrag}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-evalrag}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-evalrag-secret}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
-      - uploads_data:/app/data/uploads
       - ./app:/app/app:ro
       - ./alembic:/app/alembic:ro
     restart: unless-stopped
     depends_on:
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
 
@@ -68,6 +123,11 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://evalrag:evalrag@postgres:5432/evalrag
+      OBJECT_STORE: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-evalrag}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-evalrag}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-evalrag-secret}
     command: celery -A app.tasks.celery_app worker --loglevel=INFO --concurrency=2
     restart: unless-stopped
     healthcheck:
@@ -77,16 +137,19 @@ services:
       retries: 3
       start_period: 20s
     volumes:
-      - uploads_data:/app/data/uploads
       - ./app:/app/app:ro
       - ./alembic:/app/alembic:ro
     depends_on:
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
 
 volumes:
   redis_data:
   postgres_data:
-  uploads_data:
+  minio_data:

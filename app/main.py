@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat, documents, evaluations, feedback, health, knowledge
+from app.api.routes import auth, chat, documents, evaluations, feedback, health, knowledge
 from app.config import Settings, get_settings
 from app.container import build_container
 from app.middleware import MetricsMiddleware, RateLimitMiddleware, RequestContextMiddleware
@@ -30,6 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     for router in (
         health.router,
+        auth.router,
         knowledge.router,
         documents.router,
         chat.router,

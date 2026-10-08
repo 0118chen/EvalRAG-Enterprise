@@ -1,13 +1,15 @@
 import asyncio
 from types import SimpleNamespace
+from typing import BinaryIO
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import app.api.routes.documents as documents_route
-from app.api.routes.documents import UPLOAD_CHUNK_SIZE, _stream_upload_to_disk
+from app.api.routes.documents import UPLOAD_CHUNK_SIZE, _spool_upload
 from app.config import Settings
+from app.core.storage import ObjectStoreError
 from app.main import create_app
 from app.schemas import KnowledgeBase
 
@@ -28,44 +30,72 @@ class RecordingUploadFile:
         return chunk
 
 
-def test_upload_is_written_in_bounded_chunks(tmp_path) -> None:
+def test_upload_is_spooled_in_bounded_chunks() -> None:
     payload = b"a" * (UPLOAD_CHUNK_SIZE * 2 + 17)
     source = RecordingUploadFile(payload)
-    target = tmp_path / "doc_policy.txt"
 
-    written = asyncio.run(_stream_upload_to_disk(source, target, limit=len(payload)))
+    spool = asyncio.run(_spool_upload(source, limit=len(payload)))
 
-    assert written == len(payload)
-    assert target.read_bytes() == payload
+    try:
+        # The object store needs a seekable body, so the spool is rewound for it.
+        assert spool.read() == payload
+    finally:
+        spool.close()
     # Every read is bounded, so the payload is never held in memory as a whole.
     assert set(source.reads) == {UPLOAD_CHUNK_SIZE}
     assert len(source.reads) == 4
-    assert list(tmp_path.glob("*.part")) == []
 
 
-def test_oversize_upload_stops_reading_once_the_limit_is_exceeded(tmp_path) -> None:
+def test_oversize_upload_stops_reading_once_the_limit_is_exceeded() -> None:
     payload = b"a" * (UPLOAD_CHUNK_SIZE * 4)
     source = RecordingUploadFile(payload)
-    target = tmp_path / "doc_policy.txt"
 
     with pytest.raises(HTTPException) as error:
-        asyncio.run(_stream_upload_to_disk(source, target, limit=UPLOAD_CHUNK_SIZE + 1))
+        asyncio.run(_spool_upload(source, limit=UPLOAD_CHUNK_SIZE + 1))
 
     assert error.value.status_code == 413
-    assert not target.exists()
-    assert list(tmp_path.glob("*.part")) == []
     # Reading stops mid-stream instead of after buffering the whole payload.
     assert source.offset <= UPLOAD_CHUNK_SIZE * 2 < len(payload)
 
 
-def test_empty_upload_is_rejected(tmp_path) -> None:
+def test_empty_upload_is_rejected() -> None:
     with pytest.raises(HTTPException) as error:
-        asyncio.run(
-            _stream_upload_to_disk(RecordingUploadFile(b""), tmp_path / "x.txt", limit=10)
-        )
+        asyncio.run(_spool_upload(RecordingUploadFile(b""), limit=10))
 
     assert error.value.status_code == 400
-    assert list(tmp_path.iterdir()) == []
+
+
+def _stored_objects(tmp_path) -> list[str]:
+    """Every object in the local store, as a key, so assertions read like the store does."""
+    root = tmp_path / "data" / "uploads"
+    if not root.exists():
+        return []
+    return sorted(
+        path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
+    )
+
+
+class RedirectingStore:
+    """Stands in for S3/MinIO where the only interesting part is the URL that gets signed."""
+
+    def __init__(self, *, fail_put: bool = False) -> None:
+        self.signed: list[str] = []
+        self.fail_put = fail_put
+
+    def put(self, key: str, source: BinaryIO) -> int:
+        if self.fail_put:
+            raise ObjectStoreError("minio refused")
+        return len(source.read())
+
+    def get(self, key: str) -> bytes:
+        raise AssertionError("the API should let the browser fetch the bytes, not read them")
+
+    def delete(self, key: str) -> None:
+        self.signed = [entry for entry in self.signed if not entry.startswith(key)]
+
+    def presign_get(self, key: str, *, expires_seconds: int) -> str:
+        self.signed.append(f"{key}?expires={expires_seconds}")
+        return f"https://minio.test/{key}?signature=abc"
 
 
 def _client(tmp_path, monkeypatch, *, max_upload_mb: int):
@@ -88,29 +118,31 @@ def _client(tmp_path, monkeypatch, *, max_upload_mb: int):
     return TestClient(app), queued
 
 
-def test_api_rejects_oversized_upload_and_leaves_nothing_on_disk(tmp_path, monkeypatch) -> None:
-    client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
-
-    response = client.post(
+def _upload(client, filename: str = "policy.txt", payload: bytes = b"policy text"):
+    return client.post(
         "/api/v1/documents",
-        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
-        files={"file": ("policy.txt", b"a" * (1024 * 1024 + 1), "text/plain")},
+        data={"tenant_id": "tenant", "knowledge_base_id": "kb", "version": "v2"},
+        files={"file": (filename, payload, "text/plain")},
     )
 
+
+def test_api_rejects_oversized_upload_and_stores_nothing(tmp_path, monkeypatch) -> None:
+    client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
+
+    response = _upload(client, "policy.txt", b"a" * (1024 * 1024 + 1))
+
     assert response.status_code == 413
-    assert list((tmp_path / "data" / "uploads").glob("*")) == []
+    assert _stored_objects(tmp_path) == []
     assert client.get("/api/v1/knowledge-bases/kb/documents?tenant_id=tenant").json() == []
     assert queued == []
 
 
-def test_api_streams_upload_to_disk_and_queues_processing(tmp_path, monkeypatch) -> None:
+def test_api_stores_the_upload_under_a_derived_key_and_queues_processing(
+    tmp_path, monkeypatch
+) -> None:
     client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
 
-    response = client.post(
-        "/api/v1/documents",
-        data={"tenant_id": "tenant", "knowledge_base_id": "kb", "version": "v2"},
-        files={"file": ("policy.txt", b"policy text", "text/plain")},
-    )
+    response = _upload(client)
 
     assert response.status_code == 201
     document = response.json()
@@ -118,11 +150,79 @@ def test_api_streams_upload_to_disk_and_queues_processing(tmp_path, monkeypatch)
     assert document["version"] == "v2"
     assert queued == [document["id"]]
 
-    upload_dir = tmp_path / "data" / "uploads"
-    assert [path.name for path in upload_dir.iterdir()] == [
-        f"{document['id']}_policy.txt"
-    ]
-    assert (upload_dir / f"{document['id']}_policy.txt").read_bytes() == b"policy text"
+    # The key is derived from the row (id + filename), so no schema change was needed to
+    # move uploads into an object store.
+    assert _stored_objects(tmp_path) == [f"documents/{document['id']}/policy.txt"]
+    root = tmp_path / "data" / "uploads"
+    assert (root / "documents" / document["id"] / "policy.txt").read_bytes() == b"policy text"
+
+
+def test_a_filename_cannot_walk_out_of_the_store_root(tmp_path, monkeypatch) -> None:
+    """The client picks the filename, and the filename is part of the key."""
+    client, _ = _client(tmp_path, monkeypatch, max_upload_mb=1)
+
+    response = _upload(client, "../../escape.txt")
+
+    assert response.status_code == 201
+    stored = _stored_objects(tmp_path)
+    assert stored == [f"documents/{response.json()['id']}/.._.._escape.txt"]
+    assert not (tmp_path / "escape.txt").exists()
+
+
+def test_api_reports_503_when_the_object_store_refuses_the_write(tmp_path, monkeypatch) -> None:
+    client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
+    monkeypatch.setattr(
+        client.app.state.container, "storage", RedirectingStore(fail_put=True)
+    )
+
+    response = _upload(client)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "document could not be stored"
+    assert queued == []
+
+
+def test_content_route_returns_the_stored_bytes(tmp_path, monkeypatch) -> None:
+    client, _ = _client(tmp_path, monkeypatch, max_upload_mb=1)
+    document_id = _upload(client).json()["id"]
+
+    response = client.get(f"/api/v1/documents/{document_id}/content?tenant_id=tenant")
+
+    assert response.status_code == 200
+    assert response.content == b"policy text"
+    assert "policy.txt" in response.headers["content-disposition"]
+
+
+def test_content_route_redirects_to_a_presigned_url(tmp_path, monkeypatch) -> None:
+    """With a signing backend the API answers with a URL and never touches the bytes."""
+    client, _ = _client(tmp_path, monkeypatch, max_upload_mb=1)
+    document_id = _upload(client).json()["id"]
+    store = RedirectingStore()
+    monkeypatch.setattr(client.app.state.container, "storage", store)
+
+    response = client.get(
+        f"/api/v1/documents/{document_id}/content?tenant_id=tenant",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == (
+        f"https://minio.test/documents/{document_id}/policy.txt?signature=abc"
+    )
+    # The URL is minted for this one object and expires with the configured window.
+    assert store.signed == [f"documents/{document_id}/policy.txt?expires=300"]
+
+
+def test_content_route_reports_a_missing_object(tmp_path, monkeypatch) -> None:
+    client, _ = _client(tmp_path, monkeypatch, max_upload_mb=1)
+    document_id = _upload(client).json()["id"]
+    stored = tmp_path / "data" / "uploads" / "documents" / document_id / "policy.txt"
+    stored.unlink()
+
+    response = client.get(f"/api/v1/documents/{document_id}/content?tenant_id=tenant")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "document content not found"
 
 
 @pytest.mark.parametrize(
@@ -133,17 +233,12 @@ def test_api_rejects_file_types_it_has_no_parser_for(tmp_path, monkeypatch, file
     """Regression guard: the whitelist is the contract, and it is extension-only."""
     client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
 
-    response = client.post(
-        "/api/v1/documents",
-        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
-        files={"file": (filename, b"payload", "application/octet-stream")},
-    )
+    response = _upload(client, filename, b"payload")
 
     assert response.status_code == 400
     assert response.json()["detail"] == "supported file types: pdf, docx, html, xlsx, txt, md"
     assert queued == []
-    upload_dir = tmp_path / "data" / "uploads"
-    assert not upload_dir.exists() or list(upload_dir.glob("*")) == []
+    assert _stored_objects(tmp_path) == []
 
 
 @pytest.mark.parametrize("filename", ["page.html", "page.htm"])
@@ -151,11 +246,7 @@ def test_api_accepts_html_documents(tmp_path, monkeypatch, filename) -> None:
     """Web-only regulations used to be rejected with 400; they are content."""
     client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
 
-    response = client.post(
-        "/api/v1/documents",
-        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
-        files={"file": (filename, "<html><body><p>第一条</p></body></html>", "text/html")},
-    )
+    response = _upload(client, filename, b"<html><body><p>first</p></body></html>")
 
     assert response.status_code == 201
     assert queued == [response.json()["id"]]
@@ -165,11 +256,7 @@ def test_api_accepts_spreadsheets(tmp_path, monkeypatch) -> None:
     """A budget table is a supported upload; the legacy .xls is not."""
     client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
 
-    response = client.post(
-        "/api/v1/documents",
-        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
-        files={"file": ("table.xlsx", b"PK\\x03\\x04payload", "application/vnd.ms-excel")},
-    )
+    response = _upload(client, "table.xlsx", b"PK\x03\x04payload")
 
     assert response.status_code == 201
     assert queued == [response.json()["id"]]
@@ -185,11 +272,7 @@ def test_api_accepts_a_scanned_pdf_and_leaves_the_verdict_to_the_worker(
     """
     client, queued = _client(tmp_path, monkeypatch, max_upload_mb=1)
 
-    response = client.post(
-        "/api/v1/documents",
-        data={"tenant_id": "tenant", "knowledge_base_id": "kb"},
-        files={"file": ("scan.pdf", b"%PDF-1.7 scanned", "application/pdf")},
-    )
+    response = _upload(client, "scan.pdf", b"%PDF-1.7 scanned")
 
     assert response.status_code == 201
     assert queued == [response.json()["id"]]

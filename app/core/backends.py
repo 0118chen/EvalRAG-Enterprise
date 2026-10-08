@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Protocol
 
 from elasticsearch.exceptions import ConnectionError as ElasticsearchConnectionError
@@ -24,6 +25,7 @@ from app.core.embeddings import (
 )
 from app.core.errors import BackendUnavailableError
 from app.core.ingestion import Chunk
+from app.core.metrics import Metrics
 from app.core.retrieval import BM25Index, Fusion, cosine_similarity, fuse_rankings, retrieve
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,12 @@ class Retriever(Protocol):
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]: ...
 
 
+def _record_stage(metrics: Metrics | None, stage: str, elapsed: float) -> None:
+    """Time one retrieval stage. Callers pass `perf_counter()` deltas they already measured."""
+    if metrics is not None:
+        metrics.observe_stage(stage, elapsed)
+
+
 @dataclass
 class HybridRetriever:
     """Compose two independent retrievers and fuse their ranked evidence."""
@@ -48,12 +56,25 @@ class HybridRetriever:
     dense: Retriever
     sparse: Retriever
     fusion: Fusion | None = None
+    metrics: Metrics | None = None
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
-        dense_results, sparse_results = await asyncio.gather(self.dense.search(query, top_k), self.sparse.search(query, top_k))
-        # `fusion=None` keeps the shipped equal-weight RRF; the spec carries k, weights
-        # and the per-channel cap that the fusion experiments vary.
-        return fuse_rankings(dense_results, sparse_results, self.fusion or Fusion(), top_k)
+        # Each channel is timed by the concrete retriever that serves it (`LocalRetriever`,
+        # `MilvusDenseRetriever`, `ElasticsearchBM25Retriever`), so the two channels run
+        # concurrently without this layer re-timing them - one sample per channel per call,
+        # never two, whichever way the retriever is nested. `fusion` is the merge this class
+        # owns.
+        started = perf_counter()
+        try:
+            dense_results, sparse_results = await asyncio.gather(
+                self.dense.search(query, top_k),
+                self.sparse.search(query, top_k),
+            )
+            # `fusion=None` keeps the shipped equal-weight RRF; the spec carries k, weights
+            # and the per-channel cap that the fusion experiments vary.
+            return fuse_rankings(dense_results, sparse_results, self.fusion or Fusion(), top_k)
+        finally:
+            _record_stage(self.metrics, "fusion", perf_counter() - started)
 
 
 @dataclass
@@ -77,6 +98,9 @@ class LocalRetriever:
     mode: str = "hybrid"
     embedding: EmbeddingProvider | None = None
     fusion: Fusion | None = None
+    # Optional and placed before `bm25` (the only field with no default) so dataclass field
+    # ordering stays legal; every existing positional call passes at most four arguments.
+    metrics: Metrics | None = None
     # Built once here, not once per query: the term statistics depend on the corpus, and
     # this retriever is cached per (knowledge base, version, mode, fusion, corpus
     # fingerprint), so one build serves every query in between.
@@ -87,6 +111,19 @@ class LocalRetriever:
             self.bm25 = BM25Index([chunk.text for chunk in self.chunks])
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
+        started = perf_counter()
+        try:
+            return await self._search(query, top_k)
+        finally:
+            # One stage per call: the sparse path must not be booked as dense just because
+            # this is a hybrid retriever, and its embedding work must not be booked as sparse.
+            _record_stage(
+                self.metrics,
+                "sparse" if self.mode == "sparse" else "dense",
+                perf_counter() - started,
+            )
+
+    async def _search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         if self.mode == "sparse":
             # BM25 needs term statistics, not vectors: this path must not touch the embedding
             # provider at all (it used to, for every chunk in the corpus).
@@ -123,6 +160,7 @@ class MilvusDenseRetriever:
     uri: str = "http://localhost:19530"
     token: str | None = None
     version: str | None = None
+    metrics: Metrics | None = None
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         if not query.strip():
@@ -130,6 +168,13 @@ class MilvusDenseRetriever:
         return await self.search_vector(await embed_text(self.embedding, query), top_k)
 
     async def search_vector(self, query_vector: list[float], top_k: int) -> list[tuple[Chunk, float]]:
+        started = perf_counter()
+        try:
+            return await self._search_vector(query_vector, top_k)
+        finally:
+            _record_stage(self.metrics, "dense", perf_counter() - started)
+
+    async def _search_vector(self, query_vector: list[float], top_k: int) -> list[tuple[Chunk, float]]:
         validate_document_version(self.version)
         expected_dimension = getattr(self.embedding, "dimensions", None)
         if expected_dimension is not None and len(query_vector) != expected_dimension:
@@ -203,8 +248,16 @@ class ElasticsearchBM25Retriever:
     url: str = "http://localhost:9200"
     api_key: str | None = None
     version: str | None = None
+    metrics: Metrics | None = None
 
     async def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
+        started = perf_counter()
+        try:
+            return await self._search(query, top_k)
+        finally:
+            _record_stage(self.metrics, "sparse", perf_counter() - started)
+
+    async def _search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
         from elasticsearch import AsyncElasticsearch
 
         client = AsyncElasticsearch(self.url, api_key=self.api_key)
@@ -259,10 +312,11 @@ def create_retriever(
     knowledge_base_id: str,
     document_version: str | None,
     fusion: Fusion | None = None,
+    metrics: Metrics | None = None,
 ) -> Retriever:
     embedding = create_embedding(settings)
-    local_dense = LocalRetriever(chunks, "dense", embedding)
-    local_sparse = LocalRetriever(chunks, "sparse", embedding)
+    local_dense = LocalRetriever(chunks, "dense", embedding, metrics=metrics)
+    local_sparse = LocalRetriever(chunks, "sparse", embedding, metrics=metrics)
 
     dense: Retriever = local_dense
     if settings.dense_retrieval_backend == "milvus":
@@ -273,6 +327,7 @@ def create_retriever(
             settings.milvus_uri,
             settings.milvus_token,
             document_version,
+            metrics,
         )
         if settings.external_retrieval_fallback:
             dense = ResilientRetriever(dense, local_dense)
@@ -289,6 +344,7 @@ def create_retriever(
             settings.elasticsearch_url,
             settings.elasticsearch_api_key,
             document_version,
+            metrics,
         )
         if settings.external_retrieval_fallback:
             sparse = ResilientRetriever(sparse, local_sparse)
@@ -301,4 +357,4 @@ def create_retriever(
         return dense
     if mode == "sparse":
         return sparse
-    return HybridRetriever(dense, sparse, fusion)
+    return HybridRetriever(dense, sparse, fusion, metrics)

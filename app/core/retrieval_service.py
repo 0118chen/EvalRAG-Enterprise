@@ -8,6 +8,7 @@ from app.config import Settings
 from app.core.backends import Retriever, create_retriever
 from app.core.cache import Cache, cache_key
 from app.core.ingestion import Chunk
+from app.core.metrics import Metrics
 from app.core.observability import TraceManager
 from app.core.query_rewrite import QueryRewriter
 from app.core.reranking import Reranker
@@ -33,12 +34,16 @@ class RetrievalService:
         cache: Cache,
         query_rewriter: QueryRewriter,
         reranker: Reranker,
+        metrics: Metrics | None = None,
     ) -> None:
         self.settings = settings
         self.traces = traces
         self.cache = cache
         self.query_rewriter = query_rewriter
         self.reranker = reranker
+        # Optional and keyword-only-in-practice: the service is constructed positionally in
+        # tests and scripts, so the metrics handle cannot be a required positional argument.
+        self.metrics = metrics
         # Built retrievers, keyed by (knowledge base, version, mode, fusion, corpus
         # fingerprint). Entries are cheap (the vectors live in the shared embedding cache),
         # and 32 leaves room for the whole evaluation matrix without evicting mid-run.
@@ -157,13 +162,11 @@ class RetrievalService:
                 metadata={**metadata, "candidate_k": candidate_k},
                 inputs={"queries": rewritten_queries},
             ) as rank_span:
-                ranked_lists = await asyncio.gather(
-                    *[retriever.search(query, candidate_k) for query in rewritten_queries]
-                )
-                fused = (
-                    ranked_lists[0][:candidate_k]
-                    if len(ranked_lists) == 1
-                    else reciprocal_rank_fusion(*ranked_lists, top_k=candidate_k)
+                # The per-channel and fusion samples come from the retriever layer, which
+                # times exactly the call it makes; timing the same work again here would put
+                # two samples of different sizes into one histogram.
+                fused = await self._rank(
+                    retriever, rewritten_queries, candidate_k
                 )
                 rank_span.update_metadata(candidate_count=len(fused))
 
@@ -174,7 +177,7 @@ class RetrievalService:
                     metadata=metadata,
                     inputs={"candidate_count": len(fused)},
                 ) as rerank_span:
-                    results = await self.reranker.rank(question, fused, top_k)
+                    results = await self._rerank(question, fused, top_k)
                     rerank_span.set_outputs(
                         {"chunk_ids": [chunk.id for chunk, _ in results]}
                     )
@@ -211,6 +214,32 @@ class RetrievalService:
                 reranked=use_rerank,
                 document_version=document_version,
             )
+
+    async def _rank(
+        self,
+        retriever: Retriever,
+        queries: list[str],
+        candidate_k: int,
+    ) -> list[tuple[Chunk, float]]:
+        """Run every rewritten query through the retriever and fuse the rankings."""
+        ranked_lists = await asyncio.gather(
+            *[retriever.search(query, candidate_k) for query in queries]
+        )
+        if len(ranked_lists) == 1:
+            return ranked_lists[0][:candidate_k]
+        return reciprocal_rank_fusion(*ranked_lists, top_k=candidate_k)
+
+    async def _rerank(
+        self,
+        question: str,
+        fused: list[tuple[Chunk, float]],
+        top_k: int,
+    ) -> list[tuple[Chunk, float]]:
+        timed = None if self.metrics is None else self.metrics.time_stage("rerank")
+        if timed is None:
+            return await self.reranker.rank(question, fused, top_k)
+        with timed:
+            return await self.reranker.rank(question, fused, top_k)
 
     @staticmethod
     def _corpus_fingerprint(chunks: list[Chunk]) -> str:
@@ -250,6 +279,7 @@ class RetrievalService:
             knowledge_base_id,
             document_version,
             fusion_from_name(fusion) if fusion else None,
+            self.metrics,
         )
         self._retrievers[key] = retriever
         while len(self._retrievers) > self.RETRIEVER_CACHE_SIZE:

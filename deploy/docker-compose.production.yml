@@ -34,6 +34,49 @@ services:
     volumes:
       - redis_data:/data
 
+  # Uploads live in an object store, not on a volume shared by api and worker: those two can
+  # then run on different hosts, and a download is answered with a URL instead of a file
+  # streamed through the API. Credentials are required rather than defaulted - a production
+  # stack that silently falls back to a well-known password is worse than one that refuses to
+  # start.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  createbuckets:
+    image: minio/mc:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-evalrag}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          sleep 1
+        done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+    healthcheck:
+      disable: true
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
   migrate:
     build: ..
     env_file: ../.env.production
@@ -56,12 +99,22 @@ services:
       REDIS_URL: redis://redis:6379/0
       CACHE_BACKEND: redis
       RATE_LIMIT_BACKEND: redis
+      OBJECT_STORE: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      # The browser opens the presigned URL, so it must name a host the browser can reach -
+      # `minio` only resolves inside this compose network.
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:?set S3_PUBLIC_ENDPOINT_URL}
+      S3_BUCKET: ${S3_BUCKET:-evalrag}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     restart: unless-stopped
-    volumes:
-      - uploads_data:/app/data/uploads
     depends_on:
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
 
@@ -73,6 +126,11 @@ services:
       DATABASE_URL: postgresql+psycopg://evalrag:${POSTGRES_PASSWORD}@postgres:5432/evalrag
       REDIS_URL: redis://redis:6379/0
       CACHE_BACKEND: redis
+      OBJECT_STORE: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-evalrag}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     command: celery -A app.tasks.celery_app worker --loglevel=INFO --concurrency=4
     restart: unless-stopped
     healthcheck:
@@ -81,15 +139,17 @@ services:
       timeout: 15s
       retries: 3
       start_period: 20s
-    volumes:
-      - uploads_data:/app/data/uploads
     depends_on:
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
 
 volumes:
   postgres_data:
   redis_data:
-  uploads_data:
+  minio_data:
